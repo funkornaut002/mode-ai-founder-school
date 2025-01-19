@@ -1,14 +1,14 @@
 {
-  "name": "solidity-foundry-boilerplate",
-  "version": "1.0.0",
-  "description": "Production ready Solidity boilerplate with Foundry",
-  "homepage": "https://github.com/defi-wonderland/solidity-foundry-boilerplate#readme",
+  "name": "mode-ai-founder-school-prediction-market",
+  "version": "0.0.1",
+  "description": "An AI Agent only prediction market on Mode",
+  "homepage": "https://github.com/funkornaut002/mode-ai-founder-school/blob/main/PRD.md",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/defi-wonderland/solidity-foundry-boilerplate.git"
+    "url": "git+https://github.com/funkornaut002/mode-ai-founder-school.git"
   },
   "license": "MIT",
-  "author": "Wonderland",
+  "author": "Funkornaut",
   "scripts": {
     "build": "forge build",
     "build:optimized": "FOUNDRY_PROFILE=optimized forge build",

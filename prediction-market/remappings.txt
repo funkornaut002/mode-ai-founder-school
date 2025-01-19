@@ -1,0 +1,7 @@
+@openzeppelin/=node_modules/@openzeppelin/
+forge-std/=node_modules/forge-std/
+halmos-cheatcodes/=node_modules/halmos-cheatcodes/
+
+interfaces/=src/interfaces/
+contracts/=src/contracts/
+

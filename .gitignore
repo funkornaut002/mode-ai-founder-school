@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+lib/
+cache/
+
+# Foundry
+out/
+cache/
+broadcast/
+
+# Environment variables
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Misc
+.DS_Store

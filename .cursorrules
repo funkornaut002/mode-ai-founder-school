@@ -1,0 +1,143 @@
+{
+  "language": "solidity",
+  "rules": {
+    "quotes": {
+      "style": "single"
+    },
+    "imports": {
+      "style": "named",
+      "order": [
+        "^@openzeppelin/",
+        "^@external/",
+        "^@interfaces/",
+        "^@contracts/",
+        "^[./]"
+      ],
+      "restrictions": {
+        "external": {
+          "preserveStyle": true,
+          "message": "External library styles should not be modified"
+        },
+        "unnecessary": {
+          "warn": true,
+          "message": "Avoid unnecessary imports to keep contracts simple"
+        }
+      }
+    },
+    "inheritance": {
+      "order": [
+        "contracts",
+        "interfaces"
+      ],
+      "message": "Inherit interfaces last to avoid linearization issues"
+    },
+    "visibility": {
+      "order": [
+        "external",
+        "public",
+        "internal",
+        "private"
+      ],
+      "preference": "public",
+      "message": "Prefer public visibility when possible for better contract interaction"
+    },
+    "contractMembers": {
+      "order": [
+        "event",
+        "error",
+        "struct",
+        "stateVariable",
+        "function"
+      ]
+    },
+    "stateVariables": {
+      "order": [
+        "constant",
+        "immutable",
+        "state"
+      ]
+    },
+    "naming": {
+      "stateConstantImmutable": {
+        "style": "UPPER_SNAKE_CASE"
+      },
+      "statePublicExternal": {
+        "style": "camelCase"
+      },
+      "statePrivateInternal": {
+        "style": "_prefixCamelCase"
+      },
+      "localVariables": {
+        "style": "_prefixCamelCase",
+        "minLength": 3,
+        "message": "Avoid shortened variable names, prioritize readability"
+      },
+      "functionArguments": {
+        "style": "_prefixCamelCase"
+      },
+      "functionReturns": {
+        "style": "_prefixCamelCase"
+      },
+      "events": {
+        "style": "PastTenseCapWords",
+        "descriptive": true,
+        "message": "Event names should be self-explanatory and in past tense"
+      },
+      "errors": {
+        "style": "ContractName_ErrorDescription",
+        "descriptive": true,
+        "message": "Error names should be self-explanatory and prefixed with contract name"
+      },
+      "interfaces": {
+        "prefix": "I",
+        "message": "Interface names must start with 'I'"
+      }
+    },
+    "natspec": {
+      "required": {
+        "publicExternal": true,
+        "events": true,
+        "errors": true,
+        "structs": true
+      },
+      "sections": [
+        "notice",
+        "dev",
+        "param",
+        "return"
+      ]
+    },
+    "types": {
+      "requireExplicitSize": true
+    },
+    "stateChanges": {
+      "requireEvents": true,
+      "message": "Storage/state changes must emit corresponding events"
+    },
+    "customRules": {
+      "errorPrefix": {
+        "pattern": "^[A-Z][a-zA-Z0-9]*_[A-Z][a-zA-Z0-9]*$",
+        "message": "Error names must be prefixed with contract name in CapWords style"
+      },
+      "inheritdocRequired": {
+        "pattern": "/// @inheritdoc I[A-Z][a-zA-Z0-9]*",
+        "message": "Public/external functions must use @inheritdoc"
+      },
+      "requireCustomErrors": {
+        "disallowRequireStrings": true,
+        "message": "Use custom errors instead of require statements with strings"
+      },
+      "contractComplexity": {
+        "maxLines": 300,
+        "maxFunctions": 20,
+        "message": "Keep contracts as simple as possible"
+      }
+    },
+    "testing": {
+      "functionIndependence": {
+        "warn": true,
+        "message": "Unit tests should not depend on other contract functions, use mocks or state setters instead"
+      }
+    }
+  }
+}

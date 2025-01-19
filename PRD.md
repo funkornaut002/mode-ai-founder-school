@@ -29,18 +29,17 @@ Actors:
   - Market Factory: Creates and manages prediction markets
   - Market Implementation: Individual market logic and state
   - Simple Oracle System: Initially centralized with upgrade path
-  - Fixed Product Market Maker (FPMM): For price discovery
   
-- [x] Supported Tokens
-  - Collateral: MODE, veMODE, ETH, USDC, some meme coin
-  - Position Tokens: ERC1155 for outcome positions (extensible for multi-outcome)
+- [] Supported Tokens
+  - [] Collateral: MODE, veMODE, ETH, USDC, some meme coin
+  - [] Position Tokens: ERC1155 for outcome positions (extensible for multi-outcome)
   
-- [x] Core Features
-  - Binary outcome markets (Yes/No)
-  - Market creation with initial liquidity
-  - Trading positions
-  - Basic protocol fee
-  - Market resolution
+- [] Core Features
+  - [] Binary outcome markets (Yes/No)
+  - [] Market creation with initial liquidity
+  - [] Trading positions
+  - [] Basic protocol fee
+  - [] Market resolution
 
 **Market Factory:** 
 ```solidity
@@ -303,15 +302,17 @@ interface IPositionToken {
 
   
 **Creator Agent:** 
-- [ ] Ability to create markets with parameters:
-  - Question/Description
-  - End time
-  - Initial liquidity
-  - Resolution criteria
-- [ ] Fee collection mechanism
+- [ ] Ability to search for data to create markets on
+- [ ] Ability to create markets with correctly formatted parameters
+- [ ] Provides initial liquidity to markets
+- [ ] Collects fees from markets
 - [ ] Market monitoring capabilities
+- [ ] Closes markets when they are resolved
 
 **Participant Agent:** 
+- [ ] Has a unique personality that influences their trading behavior
+- [ ] Uses unique data sources to make trading decisions
+- [ ] Ability to interact with markets
 - [ ] Position trading capabilities
 - [ ] Portfolio management
 - [ ] Risk assessment logic
@@ -320,21 +321,10 @@ interface IPositionToken {
 ### Non-Functional Requirements:  
 
 **Onchain Prediction Market:** 
-- Gas optimization for Mode Network
-- Upgradeable contract design
-- Emergency pause functionality
-- Comprehensive event emissions for off-chain tracking
-- Test coverage > 90%
 
 **Creator Agent:** 
-- Configurable market creation parameters
-- Reliable market resolution
-- Error handling and retry mechanisms
 
 **Participant Agent:** 
-- Configurable trading strategies
-- Risk management parameters
-- Transaction monitoring
 
 ---
 
@@ -344,8 +334,12 @@ interface IPositionToken {
 
 ---
 
-## 5. Tools  
+## 5. Tools / Research 
 Need more research on this.
+
+https://github.com/agentcoinorg/predictionprophet - warpcast prediction bot
+https://github.com/gnosis/prediction-market-agent-tooling - gnosis prediction market agent tooling
+https://github.com/gnosis/prediction-market-agent?tab=readme-ov-file - gnosis prediction market agent
 
 ---
 
@@ -355,8 +349,23 @@ Need more research on this.
 ---
 
 ## 7. Deliverables  
-- Deliverable 1: *What will be completed?*  
-- Deliverable 2: *What will be completed?*  
+- Deliverable 1: *Smart Contracts*
+- Deliverable 1a: *Smart Contracts tested*
+- Deliverable 1b: *Smart Contracts deployed to Mode TestNetwork*
+
+- Deliverable 2: *Creator Agent*
+- Deliverable 2a: *Creator Agent interacting with Market Factory*
+- Deliverable 2b: *Creator Agent creating markets with correct parameters*
+- Deliverable 2c: *Creator Agent is able to receieve search information*
+- Deliverable 2d: *Creator Agent is able to create markets based on search information with A/B outcomes*
+- Deliverable 2e: *Creator Agent is able to create markets based on search information with many different outcomes*
+- Deliverable 2f: *Creator Agent deployed and running automatically*
+
+- Deliverable 3: *Participant Agent*
+- Deliverable 3a: *Participant Agent interacting with Market*
+- Deliverable 3b: *Participant Agent is able to receieve search information*
+- Deliverable 3c: *Participant Agent is able to trade positions based on search information*
+- Deliverable 3d: *Participant Agent deployed and running automatically*
 
 ---
 

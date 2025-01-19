@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.25;
 
+import { IERC20 } from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+
 /// @title Interface for Prediction Market
 /// @notice Defines the interface for individual prediction markets
 interface IMarket {
@@ -97,8 +99,8 @@ interface IMarket {
     /** @notice Thrown when collateral calculation results in zero amount */
     error Market_InvalidCollateralAmount();
 
-    /** @notice Thrown when non-creator attempts to resolve market */
-    error Market_NotCreator();
+    /** @notice Thrown when caller lacks required role */
+    error Market_Unauthorized();
 
     /** @notice Thrown when attempting to resolve an already resolved market */
     error Market_AlreadyResolved();
@@ -124,6 +126,36 @@ interface IMarket {
     /////////////////
     /// VARIABLES ///
     ///////////////// 
+
+    /** @notice The market question */
+    function question() external view returns (string memory);
+
+    /** @notice The market end time */
+    function endTime() external view returns (uint256);
+
+    /** @notice The collateral token used for trading */
+    function collateralToken() external view returns (IERC20);
+
+    /** @notice The protocol fee in basis points */
+    function protocolFee() external view returns (uint256);
+
+    /** @notice The market creator address */
+    function creator() external view returns (address);
+
+    /** @notice The current market state */
+    function state() external view returns (MarketState);
+
+    /** @notice The market outcome */
+    function outcome() external view returns (Outcome);
+
+    /** @notice The current YES token liquidity */
+    function yesLiquidity() external view returns (uint256);
+
+    /** @notice The current NO token liquidity */
+    function noLiquidity() external view returns (uint256);
+
+    /** @notice Get whitelist address at index */
+    function whitelist(uint256 index) external view returns (address);
 
     /////////////
     /// LOGIC ///
@@ -193,4 +225,34 @@ interface IMarket {
         MarketState state,
         Outcome outcome
     );
+
+    /** 
+     * @notice Calculate the amount of outcome tokens to receive for a given investment
+     * @param isYes Whether calculating for YES tokens
+     * @param investmentAmount Amount of collateral to invest
+     * @return Amount of outcome tokens to receive
+     */
+    function calcBuyAmount(bool isYes, uint256 investmentAmount) external view returns (uint256);
+
+    /** 
+     * @notice Calculate the amount of collateral to receive for selling outcome tokens
+     * @param isYes Whether calculating for YES tokens
+     * @param positionAmount Amount of outcome tokens to sell
+     * @return Amount of collateral to receive
+     */
+    function calcSellAmount(bool isYes, uint256 positionAmount) external view returns (uint256);
+
+    /** 
+     * @notice Calculate the amount of LP tokens to receive for adding liquidity
+     * @param collateralAmount Amount of collateral to add
+     * @return Amount of LP tokens to receive
+     */
+    function calcLPTokensForLiquidity(uint256 collateralAmount) external view returns (uint256);
+
+    /** 
+     * @notice Calculate the amount of collateral to receive for burning LP tokens
+     * @param lpTokens Amount of LP tokens to burn
+     * @return Amount of collateral to receive
+     */
+    function calcCollateralForLPTokens(uint256 lpTokens) external view returns (uint256);
 } 

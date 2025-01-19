@@ -6,15 +6,17 @@ import { SafeERC20 } from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 import { ReentrancyGuard } from '@openzeppelin/contracts/utils/ReentrancyGuard.sol';
 import { ERC1155 } from '@openzeppelin/contracts/token/ERC1155/ERC1155.sol';
 import { IMarket } from 'interfaces/IMarket.sol';
-import { IFPMM } from 'interfaces/IFPMM.sol';
+//import { IMarket } from 'interfaces/IMarket.sol';
 
 /** 
  * @title Prediction Market Implementation
  * @author Funkornaut
  * @notice Implements a binary outcome prediction market with FPMM
  */
-contract Market is IMarket, IFPMM, ERC1155, ReentrancyGuard {
+contract Market is IMarket, ERC1155, ReentrancyGuard {
     using SafeERC20 for IERC20;
+
+    //@note not sure we need these constants
 
     /// @notice Scaling factor for liquidity calculations.
     uint256 private constant _SCALE = 1e18;
@@ -29,8 +31,6 @@ contract Market is IMarket, IFPMM, ERC1155, ReentrancyGuard {
     uint256 private constant _LP_TOKEN_ID = 3;
 
 
-    // Events
-
 
     // State variables
     string public question;
@@ -40,9 +40,9 @@ contract Market is IMarket, IFPMM, ERC1155, ReentrancyGuard {
     address public creator;
     MarketState public state;
     Outcome public outcome;
-    
-    uint256 private _yesLiquidity;
-    uint256 private _noLiquidity;
+    uint256 public yesLiquidity;
+    uint256 public noLiquidity;
+    address[] public whitelist;
 
     constructor(
         string memory _question,
@@ -50,7 +50,8 @@ contract Market is IMarket, IFPMM, ERC1155, ReentrancyGuard {
         address _collateralToken,
         uint256 _initialLiquidity,
         uint256 _protocolFee,
-        address _creator
+        address _creator,
+        address[] memory _whitelist
     ) ERC1155('') {
         question = _question;
         endTime = _endTime;
@@ -59,10 +60,11 @@ contract Market is IMarket, IFPMM, ERC1155, ReentrancyGuard {
         creator = _creator;
         state = MarketState.Trading;
         outcome = Outcome.Unresolved;
+        whitelist = _whitelist;
 
         // Initialize liquidity pools
-        _yesLiquidity = _initialLiquidity / 2;
-        _noLiquidity = _initialLiquidity / 2;
+        yesLiquidity = _initialLiquidity / 2;
+        noLiquidity = _initialLiquidity / 2;
 
         // Transfer initial liquidity from creator
         collateralToken.safeTransferFrom(_creator, address(this), _initialLiquidity);
@@ -72,94 +74,93 @@ contract Market is IMarket, IFPMM, ERC1155, ReentrancyGuard {
     }
 
     /// @inheritdoc IMarket
-    function buy(bool isYes, uint256 investmentAmount) external nonReentrant returns (uint256) {
+    function buy(bool _isYes, uint256 _investmentAmount) external nonReentrant returns (uint256) {
         if (state != MarketState.Trading) revert Market_NotTrading();
         if (block.timestamp >= endTime) revert Market_TradingEnded();
 
-        uint256 buyAmount = calcBuyAmount(isYes, investmentAmount);
+        uint256 buyAmount = calcBuyAmount(_isYes, _investmentAmount);
         if (buyAmount == 0) revert Market_InvalidBuyAmount();
 
         // Transfer collateral from buyer
-        collateralToken.safeTransferFrom(msg.sender, address(this), investmentAmount);
+        collateralToken.safeTransferFrom(msg.sender, address(this), _investmentAmount);
 
         // Update liquidity
-        if (isYes) {
-            _yesLiquidity += investmentAmount;
+        if (_isYes) {
+            yesLiquidity += _investmentAmount;
             _mint(msg.sender, _YES_TOKEN_ID, buyAmount, '');
         } else {
-            _noLiquidity += investmentAmount;
+            noLiquidity += _investmentAmount;
             _mint(msg.sender, _NO_TOKEN_ID, buyAmount, '');
         }
 
-        emit TokensBought(msg.sender, isYes, investmentAmount, buyAmount);
+        emit TokensBought(msg.sender, _isYes, _investmentAmount, buyAmount);
         return buyAmount;
     }
 
     /// @inheritdoc IMarket
-    function sell(bool isYes, uint256 positionAmount) external nonReentrant returns (uint256) {
+    function sell(bool _isYes, uint256 _positionAmount) external nonReentrant returns (uint256) {
         if (state != MarketState.Trading) revert Market_NotTrading();
         if (block.timestamp >= endTime) revert Market_TradingEnded();
 
-        uint256 returnAmount = calcSellAmount(isYes, positionAmount);
+        uint256 returnAmount = calcSellAmount(_isYes, _positionAmount);
         if (returnAmount == 0) revert Market_InvalidSellAmount();
 
         // Burn position tokens
-        uint256 tokenId = isYes ? _YES_TOKEN_ID : _NO_TOKEN_ID;
-        _burn(msg.sender, tokenId, positionAmount);
+        uint256 tokenId = _isYes ? _YES_TOKEN_ID : _NO_TOKEN_ID;
+        _burn(msg.sender, tokenId, _positionAmount);
 
         // Update liquidity
-        if (isYes) {
-            _yesLiquidity -= returnAmount;
+        if (_isYes) {
+            yesLiquidity -= returnAmount;
         } else {
-            _noLiquidity -= returnAmount;
+            noLiquidity -= returnAmount;
         }
 
         // Transfer collateral to seller
         collateralToken.safeTransfer(msg.sender, returnAmount);
 
-        emit TokensSold(msg.sender, isYes, positionAmount, returnAmount);
+        emit TokensSold(msg.sender, _isYes, _positionAmount, returnAmount);
         return returnAmount;
     }
 
     /// @inheritdoc IMarket
-    function addLiquidity(uint256 amount) external nonReentrant returns (uint256) {
+    function addLiquidity(uint256 _amount) external nonReentrant returns (uint256) {
         if (state != MarketState.Trading) revert Market_NotTrading();
-        if (amount == 0) revert Market_InvalidAmount();
+        if (_amount == 0) revert Market_InvalidAmount();
 
-        uint256 lpTokens = calcLPTokensForLiquidity(amount);
+        uint256 lpTokens = calcLPTokensForLiquidity(_amount);
         if (lpTokens == 0) revert Market_InvalidLPTokens();
 
         // Transfer collateral from provider
-        collateralToken.safeTransferFrom(msg.sender, address(this), amount);
+        collateralToken.safeTransferFrom(msg.sender, address(this), _amount);
 
         // Mint LP tokens
         _mint(msg.sender, _LP_TOKEN_ID, lpTokens, '');
 
-        emit LiquidityAdded(msg.sender, amount, lpTokens);
+        emit LiquidityAdded(msg.sender, _amount, lpTokens);
         return lpTokens;
     }
 
     /// @inheritdoc IMarket
-    function removeLiquidity(uint256 lpTokens) external nonReentrant returns (uint256) {
+    function removeLiquidity(uint256 _lpTokens) external nonReentrant returns (uint256) {
         if (state != MarketState.Trading) revert Market_NotTrading();
-        if (lpTokens == 0) revert Market_InvalidAmount();
+        if (_lpTokens == 0) revert Market_InvalidAmount();
 
-        uint256 collateralAmount = calcCollateralForLPTokens(lpTokens);
+        uint256 collateralAmount = calcCollateralForLPTokens(_lpTokens);
         if (collateralAmount == 0) revert Market_InvalidCollateralAmount();
 
         // Burn LP tokens
-        _burn(msg.sender, _LP_TOKEN_ID, lpTokens);
+        _burn(msg.sender, _LP_TOKEN_ID, _lpTokens);
 
         // Transfer collateral to provider
         collateralToken.safeTransfer(msg.sender, collateralAmount);
 
-        emit LiquidityRemoved(msg.sender, lpTokens, collateralAmount);
+        emit LiquidityRemoved(msg.sender, _lpTokens, collateralAmount);
         return collateralAmount;
     }
 
     /// @inheritdoc IMarket
     function resolveMarket(Outcome _outcome) external {
-        if (msg.sender != creator) revert Market_NotCreator();
         if (state != MarketState.Trading) revert Market_AlreadyResolved();
         if (block.timestamp < endTime) revert Market_TradingNotEnded();
         if (_outcome == Outcome.Unresolved) revert Market_InvalidOutcome();
@@ -201,38 +202,38 @@ contract Market is IMarket, IFPMM, ERC1155, ReentrancyGuard {
         return winnings;
     }
 
-    /// @inheritdoc IFPMM
-    function calcBuyAmount(bool isYes, uint256 investmentAmount) public view returns (uint256) {
-        uint256 poolBalance = isYes ? _yesLiquidity : _noLiquidity;
-        return (investmentAmount * _SCALE) / (poolBalance + investmentAmount);
-    }
-
-    /// @inheritdoc IFPMM
-    function calcSellAmount(bool isYes, uint256 positionAmount) public view returns (uint256) {
-        uint256 poolBalance = isYes ? _yesLiquidity : _noLiquidity;
-        return (positionAmount * poolBalance) / _SCALE;
-    }
-
-    /// @inheritdoc IFPMM
-    function calcLPTokensForLiquidity(uint256 collateralAmount) public view returns (uint256) {
-        uint256 totalSupply = collateralToken.totalSupply();
-        if (totalSupply == 0) {
-            return collateralAmount;
-        }
-        return (collateralAmount * totalSupply) / (_yesLiquidity + _noLiquidity);
-    }
-
-    /// @inheritdoc IFPMM
-    function calcCollateralForLPTokens(uint256 lpTokens) public view returns (uint256) {
-        uint256 totalSupply = collateralToken.totalSupply();
-        if (totalSupply == 0) revert Market_NoLiquidity();
-        return (lpTokens * (_yesLiquidity + _noLiquidity)) / totalSupply;
+    /// @inheritdoc IMarket
+    function calcBuyAmount(bool _isYes, uint256 _investmentAmount) public view returns (uint256) {
+        uint256 poolBalance = _isYes ? yesLiquidity : noLiquidity;
+        return (_investmentAmount * _SCALE) / (poolBalance + _investmentAmount);
     }
 
     /// @inheritdoc IMarket
-    function getPrice(bool isYes) external view returns (uint256) {
-        uint256 poolBalance = isYes ? _yesLiquidity : _noLiquidity;
-        return (poolBalance * _SCALE) / (_yesLiquidity + _noLiquidity);
+    function calcSellAmount(bool _isYes, uint256 _positionAmount) public view returns (uint256) {
+        uint256 poolBalance = _isYes ? yesLiquidity : noLiquidity;
+        return (_positionAmount * poolBalance) / _SCALE;
+    }
+
+    /// @inheritdoc IMarket
+    function calcLPTokensForLiquidity(uint256 _collateralAmount) public view returns (uint256) {
+        uint256 totalSupply = collateralToken.totalSupply();
+        if (totalSupply == 0) {
+            return _collateralAmount;
+        }
+        return (_collateralAmount * totalSupply) / (yesLiquidity + noLiquidity);
+    }
+
+    /// @inheritdoc IMarket
+    function calcCollateralForLPTokens(uint256 _lpTokens) public view returns (uint256) {
+        uint256 totalSupply = collateralToken.totalSupply();
+        if (totalSupply == 0) revert Market_NoLiquidity();
+        return (_lpTokens * (yesLiquidity + noLiquidity)) / totalSupply;
+    }
+
+    /// @inheritdoc IMarket
+    function getPrice(bool _isYes) external view returns (uint256) {
+        uint256 poolBalance = _isYes ? yesLiquidity : noLiquidity;
+        return (poolBalance * _SCALE) / (yesLiquidity + noLiquidity);
     }
 
     /// @inheritdoc IMarket
@@ -268,7 +269,7 @@ contract Market is IMarket, IFPMM, ERC1155, ReentrancyGuard {
 
         // Calculate proportional refund
         uint256 totalTokens = yesBalance + noBalance;
-        uint256 totalPool = _yesLiquidity + _noLiquidity;
+        uint256 totalPool = yesLiquidity + noLiquidity;
         uint256 refund = (totalTokens * totalPool) / (_SCALE * 2);
 
         // Transfer refund

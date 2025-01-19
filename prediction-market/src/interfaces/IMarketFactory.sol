@@ -49,6 +49,12 @@ interface IMarketFactory {
     /** @notice Thrown when attempting to create a market that already exists */
     error MarketFactory_MarketExists();
 
+    /** @notice Thrown when the fee is set higher than the maximum allowed */
+    error MarketFactory_FeeTooHigh();
+
+    /** @notice Thrown when caller lacks required role */
+    error MarketFactory_Unauthorized();
+
     /////////////////
     /// VARIABLES ///
     /////////////////
@@ -73,6 +79,13 @@ interface IMarketFactory {
      */
     function validMarkets(address market) external view returns (bool);
 
+    /** 
+     * @notice Mapping to track authorized market creators
+     * @param _agent The address to check
+     * @return True if the address is an authorized market creator
+     */
+    function isMarketCreator(address _agent) external view returns (bool);
+
     /////////////
     /// LOGIC ///
     /////////////
@@ -84,15 +97,16 @@ interface IMarketFactory {
      * @param endTime When trading period ends
      * @param collateralToken Address of token used for trading (MODE, ETH, etc)
      * @param initialLiquidity Amount of collateral to seed market
+     * @param whitelist Array of addresses allowed to participate in the market
      * @return marketAddress The address of the newly created market
      */
     function createMarket(
         string calldata question,
         uint256 endTime,
         address collateralToken,
-        uint256 initialLiquidity
+        uint256 initialLiquidity,
+        address[] calldata whitelist
     ) external returns (address marketAddress);
-
 
     /** 
      * @notice Updates the protocol fee
@@ -116,6 +130,20 @@ interface IMarketFactory {
     function isValidMarket(address market) external view returns (bool);
 
     /** 
+     * @notice Adds a new market creator
+     * @dev Only callable by contract owner
+     * @param _agent The address to add as market creator
+     */
+    function addMarketCreator(address _agent) external;
+
+    /** 
+     * @notice Removes a market creator
+     * @dev Only callable by contract owner
+     * @param _agent The address to remove as market creator
+     */
+    function removeMarketCreator(address _agent) external;
+
+    /** 
      * @notice Pauses market creation
      * @dev Only callable by contract owner
      */
@@ -126,5 +154,4 @@ interface IMarketFactory {
      * @dev Only callable by contract owner
      */
     function unpause() external;
-    
 } 

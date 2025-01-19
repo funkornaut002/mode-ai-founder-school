@@ -1,61 +1,61 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.25;
 
-import {Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
-import {Pausable} from '@openzeppelin/contracts/utils/Pausable.sol';
-import {IMarketFactory} from 'interfaces/IMarketFactory.sol';
-import {Market} from './Market.sol';
+import { Ownable } from '@openzeppelin/contracts/access/Ownable.sol';
+import { Pausable } from '@openzeppelin/contracts/utils/Pausable.sol';
+import { IMarketFactory } from 'interfaces/IMarketFactory.sol';
+import { Market } from './Market.sol';
 
 /** 
  * @title Market Factory for Prediction Markets
  * @author Funkornaut
  * @notice Factory contract for creating and managing prediction markets
  */
-contract MarketFactory is IMarketFactory, Ownable, Pausable {
+contract MarketFactory is IMarketFactory, Pausable, Ownable {
     // State variables
     uint256 public protocolFee;
     mapping(bytes32 => address) public markets;
     mapping(address => bool) public validMarkets;
+    mapping(address _agent => bool _isMarketCreator) public isMarketCreator;
 
-    constructor(uint256 _protocolFee) Ownable(msg.sender) {
+    constructor(
+        uint256 _protocolFee
+    ) Ownable(msg.sender) {
         protocolFee = _protocolFee;
     }
 
-    /** 
-     * @notice Ensures only authorized market creators can create markets
-     * @dev To be replaced with a proper roles authority system
-     * @param market The market address to check authorization for
-     */
-    modifier onlyMarketCreator(address market) {
-        // @todo add in a roles authority 
+    modifier onlyMarketCreator() {
+        if (!isMarketCreator[msg.sender]) revert MarketFactory_Unauthorized();
         _;
     }
 
     /// @inheritdoc IMarketFactory
     function createMarket(
-        string calldata question,
-        uint256 endTime,
-        address collateralToken,
-        uint256 initialLiquidity
-    ) external whenNotPaused onlyMarketCreator(msg.sender) returns (address marketAddress) {
-        if (endTime <= block.timestamp) revert MarketFactory_InvalidEndTime();
-        if (collateralToken == address(0)) revert MarketFactory_InvalidToken();
-        if (initialLiquidity == 0) revert MarketFactory_InvalidLiquidity(); //@note probaly need a minimum liquidity amount
+        string calldata _question,
+        uint256 _endTime,
+        address _collateralToken,
+        uint256 _initialLiquidity,
+        address[] calldata _whitelist
+    ) external whenNotPaused onlyMarketCreator returns (address marketAddress) {
+        if (_endTime <= block.timestamp) revert MarketFactory_InvalidEndTime();
+        if (_collateralToken == address(0)) revert MarketFactory_InvalidToken();
+        if (_initialLiquidity == 0) revert MarketFactory_InvalidLiquidity();
 
         bytes32 marketId = keccak256(
-            abi.encodePacked(question, endTime, collateralToken)
+            abi.encodePacked(_question, _endTime, _collateralToken)
         );
 
         if (markets[marketId] != address(0)) revert MarketFactory_MarketExists();
 
         // Deploy new market contract
         Market market = new Market(
-            question,
-            endTime,
-            collateralToken,
-            initialLiquidity,
+            _question,
+            _endTime,
+            _collateralToken,
+            _initialLiquidity,
             protocolFee,
-            msg.sender
+            msg.sender,
+            _whitelist
         );
         marketAddress = address(market);
 
@@ -65,29 +65,37 @@ contract MarketFactory is IMarketFactory, Ownable, Pausable {
 
         emit MarketCreated(
             marketAddress,
-            question,
-            endTime,
-            collateralToken,
-            initialLiquidity
+            _question,
+            _endTime,
+            _collateralToken,
+            _initialLiquidity
         );
     }
 
     /// @inheritdoc IMarketFactory
-    function setProtocolFee(uint256 newFee) external onlyOwner {
-        require(newFee <= 1000, 'MarketFactory_FeeTooHigh'); // Max 10%
+    function setProtocolFee(uint256 _newFee) external onlyOwner {
+        if (_newFee > 1000) revert MarketFactory_FeeTooHigh(); // Max 10%
         uint256 oldFee = protocolFee;
-        protocolFee = newFee;
-        emit ProtocolFeeUpdated(oldFee, newFee);
+        protocolFee = _newFee;
+        emit ProtocolFeeUpdated(oldFee, _newFee);
     }
 
     /// @inheritdoc IMarketFactory
-    function getMarket(bytes32 marketId) external view returns (address) {
-        return markets[marketId];
+    function getMarket(bytes32 _marketId) external view returns (address) {
+        return markets[_marketId];
     }
 
     /// @inheritdoc IMarketFactory
-    function isValidMarket(address market) external view returns (bool) {
-        return validMarkets[market];
+    function isValidMarket(address _market) external view returns (bool) {
+        return validMarkets[_market];
+    }
+
+    function addMarketCreator(address _agent) external onlyOwner {
+        isMarketCreator[_agent] = true;
+    }
+
+    function removeMarketCreator(address _agent) external onlyOwner {
+        isMarketCreator[_agent] = false;
     }
 
     /** 

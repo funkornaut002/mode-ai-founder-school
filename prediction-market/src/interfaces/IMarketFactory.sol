@@ -65,6 +65,9 @@ interface IMarketFactory {
     /** @notice Thrown when the number of outcome descriptions is invalid */
     error MarketFactory_InvalidOutcomeCount();
 
+    /** @notice Thrown when the question is invalid */
+    error MarketFactory_InvalidQuestion();
+
     /////////////////
     /// VARIABLES ///
     /////////////////

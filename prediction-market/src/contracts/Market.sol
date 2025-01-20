@@ -17,9 +17,7 @@ contract Market is IMarket, ReentrancyGuard {
 
     /// @notice Scaling factor for price calculations
     uint256 private constant _SCALE = 1e18;
-    
-    /// @notice Minimum trade size to prevent dust attacks
-    uint256 public constant MIN_TRADE = 10000; 
+
 
     struct Pool {
         uint256 virtualLiquidity;
@@ -71,7 +69,7 @@ contract Market is IMarket, ReentrancyGuard {
 
         // Deploy outcome tokens contract
         outcomeToken = new OutcomeToken(
-            "", // URI for token metadata
+            _question, // URI for token metadata
             _outcomeDescriptions
         );
 
@@ -97,13 +95,23 @@ contract Market is IMarket, ReentrancyGuard {
     }
 
     /// @inheritdoc IMarket
+    function extendMarket(uint256 _endTime) external {
+        if (msg.sender != creator) revert Market_Unauthorized();
+        if (block.timestamp <= endTime) revert Market_TradingNotEnded();
+        if (_endTime <= block.timestamp) revert Market_InvalidEndTime();
+
+        uint256 _oldEndTime = endTime;
+        endTime = _endTime;
+        emit MarketExtended(_oldEndTime, _endTime);
+    }
+
+    /// @inheritdoc IMarket
     function buy(
         uint256 _outcomeId, 
         uint256 _collateralAmount,
         uint256 _maxPriceImpactBps,
         uint256 _minTokensOut
     ) external nonReentrant returns (uint256) {
-        if (_collateralAmount < MIN_TRADE) revert Market_InvalidAmount();
         if (block.timestamp > endTime) revert Market_TradingEnded();
         if (_outcomeId >= outcomeDescriptions.length) revert Market_InvalidOutcome();
 

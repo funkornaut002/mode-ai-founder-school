@@ -12,7 +12,8 @@ import { Market } from './Market.sol';
  * @notice Factory contract for creating and managing prediction markets
  */
 contract MarketFactory is IMarketFactory, Pausable, Ownable {
-    // State variables
+    uint256 public constant MIN_MARKET_DURATION = 1 hours;
+
     mapping(bytes32 _marketId => address _marketAddress) public markets;
 
     mapping(address _agent => bool _isMarketCreator) public isMarketCreator;
@@ -34,14 +35,15 @@ contract MarketFactory is IMarketFactory, Pausable, Ownable {
         uint256 _protocolFee,
         string[] calldata _outcomeDescriptions
     ) external whenNotPaused onlyMarketCreator returns (address marketAddress) {
-        if (_endTime <= block.timestamp) revert MarketFactory_InvalidEndTime(); //@note should probaly have a min buffer time
+        if (bytes(_question).length == 0) revert MarketFactory_InvalidQuestion();
+        if (_endTime <= block.timestamp + MIN_MARKET_DURATION) revert MarketFactory_InvalidEndTime();
         if (_collateralToken == address(0)) revert MarketFactory_InvalidToken(); //@note should probaly have a whitelist of valid collateral tokens
-        if (_outcomeDescriptions.length < 2) revert MarketFactory_InvalidOutcomeCount();
         if (_protocolFee > 1000) revert MarketFactory_FeeTooHigh(); // Max 10%
+        if (_outcomeDescriptions.length < 2 || _outcomeDescriptions.length > 10) revert MarketFactory_InvalidOutcomeCount();
 
 
         bytes32 marketId = keccak256(
-            abi.encodePacked(_question, _endTime, _collateralToken) //
+            abi.encode(_question, _endTime, _collateralToken) 
         );
 
         if (markets[marketId] != address(0)) revert MarketFactory_MarketExists();

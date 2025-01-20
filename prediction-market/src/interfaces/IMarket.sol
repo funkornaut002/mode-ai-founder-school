@@ -83,6 +83,13 @@ interface IMarket {
      */
     event InvalidMarketClaimed(address indexed user, uint256 amount);
 
+    /** 
+     * @notice Emitted when the market is extended
+     * @param oldEndTime The old end time
+     * @param newEndTime The new end time
+     */
+    event MarketExtended(uint256 oldEndTime, uint256 newEndTime);
+
     //////////////
     /// ERRORS ///
     //////////////
@@ -209,6 +216,13 @@ interface IMarket {
     /////////////
     /// LOGIC ///
     /////////////
+
+    /** 
+     * @notice Extend the market end time
+     * @dev Only the creator can extend the market
+     * @param _endTime The new end time
+     */
+    function extendMarket(uint256 _endTime) external;
 
     /** 
      * @notice Buy outcome tokens

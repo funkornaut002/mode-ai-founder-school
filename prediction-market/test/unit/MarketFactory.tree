@@ -1,0 +1,55 @@
+UnitMarketFactoryTest::createMarket
+├── when question is empty
+│   └── it reverts
+├── when end time is less than min market duration
+│   └── it reverts
+├── when collateral token is 0
+│   └── it reverts
+├── when protocol fee is greater than max
+│   └── it reverts
+├── when outcome descriptions length is less than 2 or greater than 10
+│   └── it reverts
+├── when market already exists
+│   └── it reverts
+└── when market is created successfully
+    ├── it registers the market
+    ├── it returns the market address
+    └── it emits the correct event
+
+UnitMarketFactoryTest::getMarket
+├── when market does not exist
+│   └── it returns 0x0
+└── when market exists
+    └── it returns the market address
+
+UnitMarketFactoryTest::addMarketCreator
+├── when caller is not owner
+│   └── it reverts
+└── when caller is owner
+    ├── it adds the agent as a market creator
+    └── it emits the correct event
+
+UnitMarketFactoryTest::removeMarketCreator
+├── when caller is not owner
+│   └── it reverts
+└── when caller is owner
+    ├── it removes the agent as a market creator
+    └── it emits the correct event
+
+UnitMarketFactoryTest::pause
+├── when caller is not owner
+│   └── it reverts
+├── when factory is paused
+│   └── it reverts
+└── when caller is owner
+    ├── it pauses the market creation
+    └── it emits the correct event
+
+UnitMarketFactoryTest::unpause
+├── when caller is not owner
+│   └── it reverts
+├── when factory is not paused
+│   └── it reverts
+└── when caller is owner
+    ├── it unpauses the market creation
+    └── it emits the correct event

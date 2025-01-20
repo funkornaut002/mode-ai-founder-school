@@ -12,26 +12,33 @@ interface IMarketFactory {
     
     /** 
      * @notice Emitted when a new prediction market is created
+     * @param marketId The markets unique id
      * @param marketAddress The address of the newly created market contract
      * @param question The question or description of the market
      * @param endTime The timestamp when trading period ends
      * @param collateralToken The address of the token used for trading
-     * @param initialLiquidity The amount of collateral used to seed the market
+     * @param virtualLiquidity The amount of virtual collateral used to start the market
      */
     event MarketCreated(
+        bytes32 marketId,
         address indexed marketAddress,
         string question,
         uint256 endTime,
         address collateralToken,
-        uint256 initialLiquidity
+        uint256 virtualLiquidity
     );
+    
+    /** 
+     * @notice Emitted when a new market creator is added
+     * @param agent The address of the new market creator
+     */
+    event MarketCreatorAdded(address indexed agent);
 
     /** 
-     * @notice Emitted when the protocol fee is updated
-     * @param oldFee The previous fee value in basis points
-     * @param newFee The new fee value in basis points
+     * @notice Emitted when a market creator is removed
+     * @param agent The address of the removed market creator
      */
-    event ProtocolFeeUpdated(uint256 oldFee, uint256 newFee);
+    event MarketCreatorRemoved(address indexed agent);
 
     //////////////
     /// Errors ///
@@ -55,15 +62,12 @@ interface IMarketFactory {
     /** @notice Thrown when caller lacks required role */
     error MarketFactory_Unauthorized();
 
+    /** @notice Thrown when the number of outcome descriptions is invalid */
+    error MarketFactory_InvalidOutcomeCount();
+
     /////////////////
     /// VARIABLES ///
     /////////////////
-
-    /** 
-     * @notice The protocol fee in basis points (1/10000)
-     * @return The current protocol fee
-     */
-    function protocolFee() external view returns (uint256);
 
     /** 
      * @notice Mapping of market IDs to market addresses
@@ -72,12 +76,6 @@ interface IMarketFactory {
      */
     function markets(bytes32 marketId) external view returns (address);
 
-    /** 
-     * @notice Mapping to track valid market addresses
-     * @param market The address to check
-     * @return True if the address is a valid market, false otherwise
-     */
-    function validMarkets(address market) external view returns (bool);
 
     /** 
      * @notice Mapping to track authorized market creators
@@ -93,27 +91,22 @@ interface IMarketFactory {
     /** 
      * @notice Creates a new prediction market
      * @dev The market creator must be authorized and provide sufficient initial liquidity
-     * @param question The market question/description
-     * @param endTime When trading period ends
-     * @param collateralToken Address of token used for trading (MODE, ETH, etc)
-     * @param initialLiquidity Amount of collateral to seed market
-     * @param whitelist Array of addresses allowed to participate in the market
+     * @param _question The market question/description
+     * @param _endTime When trading period ends
+     * @param _collateralToken Address of token used for trading (MODE, ETH, etc)
+     * @param _virtualLiquidity Amount of virtual collateral to seed market
+     * @param _outcomeDescriptions Array of descriptions for each possible outcome
      * @return marketAddress The address of the newly created market
      */
     function createMarket(
-        string calldata question,
-        uint256 endTime,
-        address collateralToken,
-        uint256 initialLiquidity,
-        address[] calldata whitelist
+        string calldata _question,
+        uint256 _endTime,
+        address _collateralToken,
+        uint256 _virtualLiquidity,
+        uint256 _protocolFee,
+        string[] calldata _outcomeDescriptions
     ) external returns (address marketAddress);
 
-    /** 
-     * @notice Updates the protocol fee
-     * @dev Only callable by the contract owner
-     * @param newFee The new fee value in basis points (max 1000 = 10%)
-     */
-    function setProtocolFee(uint256 newFee) external;
 
     /** 
      * @notice Retrieves a market address by its ID
@@ -122,12 +115,6 @@ interface IMarketFactory {
      */
     function getMarket(bytes32 marketId) external view returns (address);
 
-    /** 
-     * @notice Checks if an address is a valid market
-     * @param market The address to validate
-     * @return True if the address is a valid market, false otherwise
-     */
-    function isValidMarket(address market) external view returns (bool);
 
     /** 
      * @notice Adds a new market creator

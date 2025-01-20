@@ -4,236 +4,220 @@ pragma solidity 0.8.25;
 import { IERC20 } from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import { SafeERC20 } from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import { ReentrancyGuard } from '@openzeppelin/contracts/utils/ReentrancyGuard.sol';
-import { ERC1155 } from '@openzeppelin/contracts/token/ERC1155/ERC1155.sol';
+import { OutcomeToken } from 'tokens/OutcomeToken.sol';
 import { IMarket } from 'interfaces/IMarket.sol';
-//import { IMarket } from 'interfaces/IMarket.sol';
 
 /** 
  * @title Prediction Market Implementation
  * @author Funkornaut
  * @notice Implements a binary outcome prediction market with FPMM
  */
-contract Market is IMarket, ERC1155, ReentrancyGuard {
+contract Market is IMarket, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    //@note not sure we need these constants
-
-    /// @notice Scaling factor for liquidity calculations.
+    /// @notice Scaling factor for price calculations
     uint256 private constant _SCALE = 1e18;
+    
+    /// @notice Minimum trade size to prevent dust attacks
+    uint256 public constant MIN_TRADE = 10000; 
 
-    /// @notice Token ID for the 'Yes' outcome.
-    uint256 private constant _YES_TOKEN_ID = 1;
+    struct Pool {
+        uint256 virtualLiquidity;
+        uint256 realTokens;
+        uint256 realCollateral;
+    }
 
-    /// @notice Token ID for the 'No' outcome.
-    uint256 private constant _NO_TOKEN_ID = 2;
+    /// @notice Stores pool data for each outcome
+    mapping(uint256 _tokenId => Pool) public outcomePools;
+    
+    /// @notice Outcome token contract
+    OutcomeToken public outcomeToken;
 
-    /// @notice Token ID for Liquidity Provider (LP) tokens.
-    uint256 private constant _LP_TOKEN_ID = 3;
-
-
-
-    // State variables
+    /// @inheritdoc IMarket
     string public question;
+    /// @inheritdoc IMarket
     uint256 public endTime;
+    /// @inheritdoc IMarket
     IERC20 public collateralToken;
+    /// @inheritdoc IMarket
     uint256 public protocolFee;
+    /// @inheritdoc IMarket
     address public creator;
-    MarketState public state;
+    /// @inheritdoc IMarket
     Outcome public outcome;
-    uint256 public yesLiquidity;
-    uint256 public noLiquidity;
-    address[] public whitelist;
+    /// @inheritdoc IMarket
+    uint256 public winningOutcomeTokenId;
+    /// @inheritdoc IMarket
+    string[] public outcomeDescriptions;
 
     constructor(
         string memory _question,
         uint256 _endTime,
         address _collateralToken,
-        uint256 _initialLiquidity,
+        uint256 _virtualLiquidity,
         uint256 _protocolFee,
-        address _creator,
-        address[] memory _whitelist
-    ) ERC1155('') {
+        string[] memory _outcomeDescriptions
+    ) {
+        if (_endTime <= block.timestamp) revert Market_InvalidEndTime();
+        if (_outcomeDescriptions.length < 2) revert Market_InvalidOutcomeCount();
+        
         question = _question;
         endTime = _endTime;
         collateralToken = IERC20(_collateralToken);
         protocolFee = _protocolFee;
-        creator = _creator;
-        state = MarketState.Trading;
+        creator = msg.sender;
         outcome = Outcome.Unresolved;
-        whitelist = _whitelist;
+        outcomeDescriptions = _outcomeDescriptions;
 
-        // Initialize liquidity pools
-        yesLiquidity = _initialLiquidity / 2;
-        noLiquidity = _initialLiquidity / 2;
+        // Deploy outcome tokens contract
+        outcomeToken = new OutcomeToken(
+            "", // URI for token metadata
+            _outcomeDescriptions
+        );
 
-        // Transfer initial liquidity from creator
-        collateralToken.safeTransferFrom(_creator, address(this), _initialLiquidity);
-        
-        // Mint initial LP tokens to creator
-        _mint(_creator, _LP_TOKEN_ID, _initialLiquidity, '');
+        // Initialize virtual outcomePools with equal liquidity
+        for(uint256 i = 0; i < _outcomeDescriptions.length; i++) {
+            outcomePools[i] = Pool({
+                virtualLiquidity: _virtualLiquidity,
+                realTokens: 0,
+                realCollateral: 0
+            });
+        }
     }
 
     /// @inheritdoc IMarket
-    function buy(bool _isYes, uint256 _investmentAmount) external nonReentrant returns (uint256) {
-        if (state != MarketState.Trading) revert Market_NotTrading();
-        if (block.timestamp >= endTime) revert Market_TradingEnded();
+    function getOutcomeCount() external view returns (uint256 _outcomeCount) {
+        return outcomeDescriptions.length;
+    }
 
-        uint256 buyAmount = calcBuyAmount(_isYes, _investmentAmount);
-        if (buyAmount == 0) revert Market_InvalidBuyAmount();
+    /// @inheritdoc IMarket
+    function getOutcomeDescription(uint256 outcomeIndex) external view returns (string memory _description) {
+        require(outcomeIndex < outcomeDescriptions.length, "Invalid outcome index");
+        return outcomeDescriptions[outcomeIndex];
+    }
 
-        // Transfer collateral from buyer
-        collateralToken.safeTransferFrom(msg.sender, address(this), _investmentAmount);
+    /// @inheritdoc IMarket
+    function buy(
+        uint256 _outcomeId, 
+        uint256 _collateralAmount,
+        uint256 _maxPriceImpactBps,
+        uint256 _minTokensOut
+    ) external nonReentrant returns (uint256) {
+        if (_collateralAmount < MIN_TRADE) revert Market_InvalidAmount();
+        if (block.timestamp > endTime) revert Market_TradingEnded();
+        if (_outcomeId >= outcomeDescriptions.length) revert Market_InvalidOutcome();
 
-        // Update liquidity
-        if (_isYes) {
-            yesLiquidity += _investmentAmount;
-            _mint(msg.sender, _YES_TOKEN_ID, buyAmount, '');
-        } else {
-            noLiquidity += _investmentAmount;
-            _mint(msg.sender, _NO_TOKEN_ID, buyAmount, '');
-        }
+        uint256 priceImpact = calculatePriceImpact(_outcomeId, _collateralAmount);
+        if (priceImpact > _maxPriceImpactBps) revert Market_PriceImpactTooHigh();
 
-        emit TokensBought(msg.sender, _isYes, _investmentAmount, buyAmount);
+        Pool storage pool = outcomePools[_outcomeId];
+        
+        // Calculate tokens following x * y = k formula
+        uint256 totalTokens = pool.virtualLiquidity + pool.realTokens;
+        uint256 buyAmount = totalTokens * _collateralAmount / (totalTokens + _collateralAmount);
+
+        if (buyAmount < _minTokensOut) revert Market_InsufficientOutput();
+
+        // Update pool state
+        pool.realTokens += buyAmount;
+        pool.realCollateral += _collateralAmount;
+
+        // Mint tokens and transfer collateral
+        outcomeToken.mint(msg.sender, _outcomeId, buyAmount);
+        collateralToken.safeTransferFrom(msg.sender, address(this), _collateralAmount);
+
+        emit TokensBought(msg.sender, _outcomeId, _collateralAmount, buyAmount);
         return buyAmount;
     }
 
-    /// @inheritdoc IMarket
-    function sell(bool _isYes, uint256 _positionAmount) external nonReentrant returns (uint256) {
-        if (state != MarketState.Trading) revert Market_NotTrading();
+    /// @notice Sell outcome tokens back to the market
+    function sell(
+        uint256 _outcomeId,
+        uint256 _tokenAmount,
+        uint256 _maxPriceImpactBps,
+        uint256 _minCollateralOut
+    ) external nonReentrant returns (uint256 collateralReturned) {
         if (block.timestamp >= endTime) revert Market_TradingEnded();
+        if (_outcomeId > outcomeDescriptions.length) revert Market_InvalidOutcome();
+        
+        if (outcomeToken.balanceOf(msg.sender, _outcomeId) < _tokenAmount) revert Market_InsufficientBalance();
 
-        uint256 returnAmount = calcSellAmount(_isYes, _positionAmount);
-        if (returnAmount == 0) revert Market_InvalidSellAmount();
+        Pool storage pool = outcomePools[_outcomeId];
+        
+        uint256 priceImpact = calculateSellPriceImpact(_outcomeId, _tokenAmount);
+        if (priceImpact > _maxPriceImpactBps) revert Market_PriceImpactTooHigh();
 
-        // Burn position tokens
-        uint256 tokenId = _isYes ? _YES_TOKEN_ID : _NO_TOKEN_ID;
-        _burn(msg.sender, tokenId, _positionAmount);
+        // Calculate collateral following x * y = k formula
+        uint256 totalTokens = pool.virtualLiquidity + pool.realTokens;
+        collateralReturned = _tokenAmount * totalTokens / (totalTokens - _tokenAmount);
+        
+        if (collateralReturned < _minCollateralOut) revert Market_InsufficientOutput();
 
-        // Update liquidity
-        if (_isYes) {
-            yesLiquidity -= returnAmount;
-        } else {
-            noLiquidity -= returnAmount;
-        }
+        // Update pool state
+        pool.realTokens -= _tokenAmount;
+        pool.realCollateral -= collateralReturned;
 
-        // Transfer collateral to seller
-        collateralToken.safeTransfer(msg.sender, returnAmount);
+        // Burn tokens and return collateral
+        outcomeToken.burn(msg.sender, _outcomeId, _tokenAmount);
+        collateralToken.safeTransfer(msg.sender, collateralReturned);
 
-        emit TokensSold(msg.sender, _isYes, _positionAmount, returnAmount);
-        return returnAmount;
+        emit TokensSold(msg.sender, _outcomeId, _tokenAmount, collateralReturned);
+        return collateralReturned;
     }
 
     /// @inheritdoc IMarket
-    function addLiquidity(uint256 _amount) external nonReentrant returns (uint256) {
-        if (state != MarketState.Trading) revert Market_NotTrading();
-        if (_amount == 0) revert Market_InvalidAmount();
-
-        uint256 lpTokens = calcLPTokensForLiquidity(_amount);
-        if (lpTokens == 0) revert Market_InvalidLPTokens();
-
-        // Transfer collateral from provider
-        collateralToken.safeTransferFrom(msg.sender, address(this), _amount);
-
-        // Mint LP tokens
-        _mint(msg.sender, _LP_TOKEN_ID, lpTokens, '');
-
-        emit LiquidityAdded(msg.sender, _amount, lpTokens);
-        return lpTokens;
-    }
-
-    /// @inheritdoc IMarket
-    function removeLiquidity(uint256 _lpTokens) external nonReentrant returns (uint256) {
-        if (state != MarketState.Trading) revert Market_NotTrading();
-        if (_lpTokens == 0) revert Market_InvalidAmount();
-
-        uint256 collateralAmount = calcCollateralForLPTokens(_lpTokens);
-        if (collateralAmount == 0) revert Market_InvalidCollateralAmount();
-
-        // Burn LP tokens
-        _burn(msg.sender, _LP_TOKEN_ID, _lpTokens);
-
-        // Transfer collateral to provider
-        collateralToken.safeTransfer(msg.sender, collateralAmount);
-
-        emit LiquidityRemoved(msg.sender, _lpTokens, collateralAmount);
-        return collateralAmount;
-    }
-
-    /// @inheritdoc IMarket
-    function resolveMarket(Outcome _outcome) external {
-        if (state != MarketState.Trading) revert Market_AlreadyResolved();
+    function resolveMarket(uint256 _winningOutcomeTokenId) external {
+        if (msg.sender != creator) revert Market_Unauthorized();
         if (block.timestamp < endTime) revert Market_TradingNotEnded();
-        if (_outcome == Outcome.Unresolved) revert Market_InvalidOutcome();
+        if (_winningOutcomeTokenId >= outcomeDescriptions.length) 
+            revert Market_InvalidOutcome();
 
-        state = MarketState.Resolved;
-        outcome = _outcome;
+        outcome = Outcome.Resolved;
+        winningOutcomeTokenId = _winningOutcomeTokenId;
 
-        emit MarketResolved(_outcome);
+        emit MarketResolved(outcome);
     }
 
     /// @inheritdoc IMarket
     function claimWinnings() external nonReentrant returns (uint256) {
-        if (state != MarketState.Resolved) revert Market_NotResolved();
-        if (outcome == Outcome.Unresolved) revert Market_NoOutcome();
+        if (block.timestamp < endTime) revert Market_TradingNotEnded();
+        if (outcome != Outcome.Resolved) revert Market_NoOutcome();
 
-        uint256 winningTokenId;
-        if (outcome == Outcome.Yes) {
-            winningTokenId = _YES_TOKEN_ID;
-        } else if (outcome == Outcome.No) {
-            winningTokenId = _NO_TOKEN_ID;
-        } else {
-            // Invalid outcome - return proportional amount
-            return _claimInvalidMarket();
-        }
-
-        uint256 tokenBalance = balanceOf(msg.sender, winningTokenId);
-        if (tokenBalance == 0) revert Market_NoTokens();
-
-        // Burn winning tokens
-        _burn(msg.sender, winningTokenId, tokenBalance);
-
-        // Calculate winnings (1:1 for winning tokens)
-        uint256 winnings = tokenBalance;
-
-        // Transfer winnings
-        collateralToken.safeTransfer(msg.sender, winnings);
-
-        emit WinningsClaimed(msg.sender, winnings);
-        return winnings;
+        Pool storage winningPool = outcomePools[winningOutcomeTokenId];
+        uint256 userTokens = outcomeToken.balanceOf(msg.sender, winningOutcomeTokenId);
+        if (userTokens == 0) revert Market_NoTokens();
+        
+        // Calculate share of total real collateral based on winning tokens
+        uint256 totalRealCollateral = getTotalRealCollateral();
+        uint256 share = (userTokens * totalRealCollateral) / winningPool.realTokens;
+            
+        outcomeToken.burn(msg.sender, winningOutcomeTokenId, userTokens);
+        collateralToken.transfer(msg.sender, share);
+        
+        emit WinningsClaimed(msg.sender, share);
+        return share;
     }
 
     /// @inheritdoc IMarket
-    function calcBuyAmount(bool _isYes, uint256 _investmentAmount) public view returns (uint256) {
-        uint256 poolBalance = _isYes ? yesLiquidity : noLiquidity;
+    function calcBuyAmount(uint256 _outcomeId, uint256 _investmentAmount) public view returns (uint256) {
+        uint256 poolBalance = outcomePools[_outcomeId].realTokens;
         return (_investmentAmount * _SCALE) / (poolBalance + _investmentAmount);
     }
 
     /// @inheritdoc IMarket
-    function calcSellAmount(bool _isYes, uint256 _positionAmount) public view returns (uint256) {
-        uint256 poolBalance = _isYes ? yesLiquidity : noLiquidity;
+    function calcSellAmount(uint256 _outcomeTokenId, uint256 _positionAmount) public view returns (uint256) {
+        uint256 poolBalance = outcomePools[_outcomeTokenId].realTokens;
         return (_positionAmount * poolBalance) / _SCALE;
     }
 
     /// @inheritdoc IMarket
-    function calcLPTokensForLiquidity(uint256 _collateralAmount) public view returns (uint256) {
-        uint256 totalSupply = collateralToken.totalSupply();
-        if (totalSupply == 0) {
-            return _collateralAmount;
-        }
-        return (_collateralAmount * totalSupply) / (yesLiquidity + noLiquidity);
-    }
-
-    /// @inheritdoc IMarket
-    function calcCollateralForLPTokens(uint256 _lpTokens) public view returns (uint256) {
-        uint256 totalSupply = collateralToken.totalSupply();
-        if (totalSupply == 0) revert Market_NoLiquidity();
-        return (_lpTokens * (yesLiquidity + noLiquidity)) / totalSupply;
-    }
-
-    /// @inheritdoc IMarket
-    function getPrice(bool _isYes) external view returns (uint256) {
-        uint256 poolBalance = _isYes ? yesLiquidity : noLiquidity;
-        return (poolBalance * _SCALE) / (yesLiquidity + noLiquidity);
+    function getPrice(uint256 _outcomeId) public view returns (uint256) {
+        if (_outcomeId > outcomeDescriptions.length) revert Market_InvalidOutcome();
+        
+        Pool storage pool = outcomePools[_outcomeId];
+        uint256 totalTokens = pool.virtualLiquidity + pool.realTokens;
+        
+        return (totalTokens * _SCALE) / getTotalLiquidity();
     }
 
     /// @inheritdoc IMarket
@@ -241,41 +225,108 @@ contract Market is IMarket, ERC1155, ReentrancyGuard {
         string memory _question,
         uint256 _endTime,
         address _collateralToken,
-        MarketState _state,
         Outcome _outcome
     ) {
-        return (question, endTime, address(collateralToken), state, outcome);
+        return (question, endTime, address(collateralToken), outcome);
     }
 
     /** 
-     * @notice Internal function to handle claims for invalid markets
+     * @notice Handle claims for invalid markets where no outcome was correct
      * @return Amount of collateral refunded
      */
-    function _claimInvalidMarket() private returns (uint256) {
-        uint256 yesBalance = balanceOf(msg.sender, _YES_TOKEN_ID);
-        uint256 noBalance = balanceOf(msg.sender, _NO_TOKEN_ID);
+    function claimInvalidMarket() external nonReentrant returns (uint256) {
+        if (block.timestamp < endTime) revert Market_TradingNotEnded();
+        if (outcome != Outcome.Invalid) revert Market_NotInvalid();
+
+        uint256 totalRefund = 0;
         
-        if (yesBalance == 0 && noBalance == 0) {
-            return 0;
+        // Check all outcome tokens the user holds
+        for(uint256 i = 0; i <= outcomeDescriptions.length; i++) {
+            Pool storage pool = outcomePools[i];
+            uint256 tokenBalance = outcomeToken.balanceOf(msg.sender, i);
+            
+            if (tokenBalance > 0) {
+                // Calculate refund based on proportion of real collateral
+                uint256 refund = (tokenBalance * pool.realCollateral) / pool.realTokens;
+                totalRefund += refund;
+                
+                // Burn the tokens
+                outcomeToken.burn(msg.sender, i, tokenBalance);
+                
+                // Update pool state
+                pool.realTokens -= tokenBalance;
+                pool.realCollateral -= refund;
+            }
         }
 
-        // Burn all tokens
-        if (yesBalance > 0) {
-            _burn(msg.sender, _YES_TOKEN_ID, yesBalance);
-        }
-        if (noBalance > 0) {
-            _burn(msg.sender, _NO_TOKEN_ID, noBalance);
-        }
-
-        // Calculate proportional refund
-        uint256 totalTokens = yesBalance + noBalance;
-        uint256 totalPool = yesLiquidity + noLiquidity;
-        uint256 refund = (totalTokens * totalPool) / (_SCALE * 2);
+        if (totalRefund == 0) revert Market_NoTokens();
 
         // Transfer refund
-        collateralToken.safeTransfer(msg.sender, refund);
+        collateralToken.safeTransfer(msg.sender, totalRefund);
 
-        emit WinningsClaimed(msg.sender, refund);
-        return refund;
+        emit InvalidMarketClaimed(msg.sender, totalRefund);
+        return totalRefund;
     }
+
+    /// @notice Calculate price impact in basis points for a given trade
+    function calculatePriceImpact(
+        uint256 _outcomeId,
+        uint256 _tradeAmount
+    ) public view returns (uint256 priceImpactBps) {
+        if (_outcomeId >= outcomeDescriptions.length) revert Market_InvalidOutcome();
+        
+        Pool storage pool = outcomePools[_outcomeId];
+        uint256 totalTokens = pool.virtualLiquidity + pool.realTokens;
+        
+        uint256 oldPrice = totalTokens * _SCALE / getTotalLiquidity();
+        uint256 newPrice = (totalTokens + _tradeAmount) * _SCALE / (getTotalLiquidity() + _tradeAmount);
+            
+        return ((newPrice - oldPrice) * 10000) / oldPrice;
+    }
+
+    /// @notice Calculate price impact for selling tokens
+    function calculateSellPriceImpact(
+        uint256 _outcomeId,
+        uint256 _tokenAmount
+    ) public view returns (uint256 priceImpactBps) {
+        if (_outcomeId >= outcomeDescriptions.length) revert Market_InvalidOutcome();
+        
+        Pool storage pool = outcomePools[_outcomeId];
+        uint256 totalTokens = pool.virtualLiquidity + pool.realTokens;
+        
+        uint256 oldPrice = totalTokens * _SCALE / getTotalLiquidity();
+        uint256 newPrice = (totalTokens - _tokenAmount) * _SCALE / (getTotalLiquidity() - _tokenAmount);
+            
+        return ((oldPrice - newPrice) * 10000) / oldPrice;
+    }
+
+    /// @notice Get total real collateral in market
+    function getTotalRealCollateral() public view returns (uint256) {
+        uint256 total = 0;
+        for(uint256 i = 0; i < outcomeDescriptions.length; i++) {
+            total += outcomePools[i].realCollateral;
+        }
+        return total;
+    }
+
+    /// @notice Get total liquidity (virtual + real)
+    function getTotalLiquidity() public view returns (uint256) {
+        uint256 total = 0;
+        for(uint256 i = 0; i < outcomeDescriptions.length; i++) {
+            Pool storage pool = outcomePools[i];
+            total += pool.virtualLiquidity + pool.realTokens;
+        }
+        return total;
+    }
+
+    function invalidateMarket() external {
+        if (msg.sender != creator) revert Market_Unauthorized();
+        if (block.timestamp < endTime) revert Market_TradingNotEnded();
+        if (outcome != Outcome.Unresolved) revert Market_AlreadyResolved();
+
+        outcome = Outcome.Invalid;
+        emit MarketInvalidated();
+    }
+
+    
 } 

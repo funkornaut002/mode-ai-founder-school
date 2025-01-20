@@ -13,16 +13,11 @@ import { Market } from './Market.sol';
  */
 contract MarketFactory is IMarketFactory, Pausable, Ownable {
     // State variables
-    uint256 public protocolFee;
-    mapping(bytes32 => address) public markets;
-    mapping(address => bool) public validMarkets;
+    mapping(bytes32 _marketId => address _marketAddress) public markets;
+
     mapping(address _agent => bool _isMarketCreator) public isMarketCreator;
 
-    constructor(
-        uint256 _protocolFee
-    ) Ownable(msg.sender) {
-        protocolFee = _protocolFee;
-    }
+    constructor() Ownable(msg.sender) {}
 
     modifier onlyMarketCreator() {
         if (!isMarketCreator[msg.sender]) revert MarketFactory_Unauthorized();
@@ -30,19 +25,23 @@ contract MarketFactory is IMarketFactory, Pausable, Ownable {
     }
 
     /// @inheritdoc IMarketFactory
+    //@note No maximum limit on _virtualLiquidity, No validation on _question length, No validation on _outcomeDescriptions individual lengths
     function createMarket(
         string calldata _question,
         uint256 _endTime,
         address _collateralToken,
-        uint256 _initialLiquidity,
-        address[] calldata _whitelist
+        uint256 _virtualLiquidity,
+        uint256 _protocolFee,
+        string[] calldata _outcomeDescriptions
     ) external whenNotPaused onlyMarketCreator returns (address marketAddress) {
-        if (_endTime <= block.timestamp) revert MarketFactory_InvalidEndTime();
-        if (_collateralToken == address(0)) revert MarketFactory_InvalidToken();
-        if (_initialLiquidity == 0) revert MarketFactory_InvalidLiquidity();
+        if (_endTime <= block.timestamp) revert MarketFactory_InvalidEndTime(); //@note should probaly have a min buffer time
+        if (_collateralToken == address(0)) revert MarketFactory_InvalidToken(); //@note should probaly have a whitelist of valid collateral tokens
+        if (_outcomeDescriptions.length < 2) revert MarketFactory_InvalidOutcomeCount();
+        if (_protocolFee > 1000) revert MarketFactory_FeeTooHigh(); // Max 10%
+
 
         bytes32 marketId = keccak256(
-            abi.encodePacked(_question, _endTime, _collateralToken)
+            abi.encodePacked(_question, _endTime, _collateralToken) //
         );
 
         if (markets[marketId] != address(0)) revert MarketFactory_MarketExists();
@@ -52,32 +51,23 @@ contract MarketFactory is IMarketFactory, Pausable, Ownable {
             _question,
             _endTime,
             _collateralToken,
-            _initialLiquidity,
-            protocolFee,
-            msg.sender,
-            _whitelist
+            _virtualLiquidity,
+            _protocolFee,
+            _outcomeDescriptions
         );
         marketAddress = address(market);
 
         // Register market
         markets[marketId] = marketAddress;
-        validMarkets[marketAddress] = true;
 
         emit MarketCreated(
+            marketId,
             marketAddress,
             _question,
             _endTime,
             _collateralToken,
-            _initialLiquidity
+            _virtualLiquidity
         );
-    }
-
-    /// @inheritdoc IMarketFactory
-    function setProtocolFee(uint256 _newFee) external onlyOwner {
-        if (_newFee > 1000) revert MarketFactory_FeeTooHigh(); // Max 10%
-        uint256 oldFee = protocolFee;
-        protocolFee = _newFee;
-        emit ProtocolFeeUpdated(oldFee, _newFee);
     }
 
     /// @inheritdoc IMarketFactory
@@ -85,17 +75,14 @@ contract MarketFactory is IMarketFactory, Pausable, Ownable {
         return markets[_marketId];
     }
 
-    /// @inheritdoc IMarketFactory
-    function isValidMarket(address _market) external view returns (bool) {
-        return validMarkets[_market];
-    }
-
     function addMarketCreator(address _agent) external onlyOwner {
         isMarketCreator[_agent] = true;
+        emit MarketCreatorAdded(_agent);
     }
 
     function removeMarketCreator(address _agent) external onlyOwner {
         isMarketCreator[_agent] = false;
+        emit MarketCreatorRemoved(_agent);
     }
 
     /** 

@@ -4,6 +4,8 @@ pragma solidity 0.8.25;
 import { ERC1155 } from '@openzeppelin/contracts/token/ERC1155/ERC1155.sol';
 import { Ownable } from '@openzeppelin/contracts/access/Ownable.sol';
 
+error OutcomeToken_InvalidId();
+
 contract OutcomeToken is ERC1155, Ownable {
     address public market;
     string[] public outcomeDescriptions;
@@ -25,7 +27,7 @@ contract OutcomeToken is ERC1155, Ownable {
     }
 
     function getOutcomeDescription(uint256 _id) external view returns (string memory) {
-        require(_id > 0 && _id <= outcomeDescriptions.length, "Invalid outcome ID");
-        return outcomeDescriptions[_id - 1];
+        if (_id >= outcomeDescriptions.length) revert OutcomeToken_InvalidId();
+        return outcomeDescriptions[_id];
     }
 } 

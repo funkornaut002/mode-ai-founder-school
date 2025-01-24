@@ -1,0 +1,157 @@
+UnitMarketTest::constructor
+└── when parameters are valid
+    ├── it sets the correct question
+    ├── it sets the correct end time
+    ├── it sets the correct collateral token
+    ├── it sets the correct protocol fee
+    ├── it sets the creator
+    ├── it sets the outcome to unresolved
+    ├── it deploys outcome token contract
+    └── it initializes pools with virtual liquidity
+
+UnitMarketTest::buy
+├── when market has ended
+│   └── it reverts
+├── when outcome id is invalid
+│   └── it reverts
+├── when price impact exceeds max
+│   └── it reverts
+├── when output is less than min tokens out
+│   └── it reverts
+└── when parameters are valid
+    ├── it calculates the price impact
+    ├── it calculates correct protocol fee
+    ├── it updates pool state correctly
+    ├── it mints correct amount of tokens
+    ├── it transfers collateral correctly
+    └── it emits correct event
+
+UnitMarketTest::sell
+├── when market has ended
+│   └── it reverts
+├── when outcome id is invalid
+│   └── it reverts
+├── when user has insufficient balance
+│   └── it reverts
+├── when price impact exceeds max
+│   └── it reverts
+├── when output is less than min collateral out
+│   └── it reverts
+└── when parameters are valid
+    ├── it calculates the price impact
+    ├── it calculates correct protocol fee
+    ├── it updates pool state correctly
+    ├── it burns correct amount of tokens
+    ├── it transfers collateral correctly
+    └── it emits correct event
+
+UnitMarketTest::resolveMarket
+├── when caller is not creator
+│   └── it reverts
+├── when market has not ended
+│   └── it reverts
+├── when outcome id is invalid
+│   └── it reverts
+└── when parameters are valid
+    ├── it sets outcome to resolved
+    ├── it sets winning outcome token id
+    └── it emits correct event
+
+UnitMarketTest::claimWinnings
+├── when market has not ended
+│   └── it reverts
+├── when market is not resolved
+│   └── it reverts
+├── when user has no tokens
+│   └── it reverts
+└── when parameters are valid
+    ├── it calculates correct share
+    ├── it burns winning tokens
+    ├── it transfers collateral to the winner
+    └── it emits correct event
+
+UnitMarketTest::extendMarket
+├── when caller is not creator
+│   └── it reverts
+├── when new end time is in the past
+│   └── it reverts
+└── when parameters are valid
+    ├── it updates end time
+    └── it emits correct event
+
+UnitMarketTest::invalidateMarket
+├── when caller is not creator
+│   └── it reverts
+├── when market has not ended
+│   └── it reverts
+├── when market is already resolved
+│   └── it reverts
+└── when parameters are valid
+    ├── it sets outcome to invalid
+    └── it emits correct event
+
+UnitMarketTest::claimInvalidMarket
+├── when market has not ended
+│   └── it reverts
+├── when market is not invalid
+│   └── it reverts
+├── when user has no tokens
+│   └── it reverts
+└── when parameters are valid
+    ├── it calculates correct refund
+    ├── it burns tokens
+    ├── it updates pool state
+    ├── it transfers refund correctly
+    └── it emits correct event
+
+UnitMarketTest::collectFees
+├── when caller is not creator
+│   └── it reverts
+├── when no fees to collect
+│   └── it reverts
+└── when parameters are valid
+    ├── it transfers fees to creator
+    ├── it resets accumulated fees
+    └── it emits correct event
+
+UnitMarketTest::getOutcomeCount
+└── it returns correct number of outcomes
+
+UnitMarketTest::getOutcomeDescription
+├── when outcome index is invalid
+│   └── it reverts
+└── when outcome index is valid
+    └── it returns correct description
+
+UnitMarketTest::calcBuyAmount
+└── it returns correct buy amount based on investment
+
+UnitMarketTest::calcSellAmount
+└── it returns correct sell amount based on position
+
+UnitMarketTest::getPrice
+├── when outcome id is invalid
+│   └── it reverts
+└── when outcome id is valid
+    └── it returns correct price
+
+UnitMarketTest::getMarketInfo
+└── it returns correct market information
+
+UnitMarketTest::calculatePriceImpact
+├── when outcome id is invalid
+│   └── it reverts
+└── when outcome id is valid
+    └── it returns correct price impact
+
+UnitMarketTest::calculateSellPriceImpact
+├── when outcome id is invalid
+│   └── it reverts
+└── when outcome id is valid
+    └── it returns correct sell price impact
+
+UnitMarketTest::getTotalRealCollateral
+└── it returns correct total real collateral
+
+UnitMarketTest::getTotalLiquidity
+└── it returns correct total liquidity

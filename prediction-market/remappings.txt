@@ -5,4 +5,4 @@ halmos-cheatcodes/=node_modules/halmos-cheatcodes/
 interfaces/=src/interfaces/
 contracts/=src/contracts/
 tokens/=src/contracts/tokens/
-
+smock/=test/smock/

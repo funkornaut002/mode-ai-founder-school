@@ -90,6 +90,14 @@ interface IMarket {
      */
     event MarketExtended(uint256 oldEndTime, uint256 newEndTime);
 
+    /** 
+     * @notice Emitted when fees are collected
+     * @param recipient Address of the recipient
+     * @param amount Amount of fees collected
+     */
+    event FeesCollected(address indexed recipient, uint256 amount);
+
+
     //////////////
     /// ERRORS ///
     //////////////
@@ -159,6 +167,12 @@ interface IMarket {
 
     /** @notice Thrown when insufficient output is received */
     error Market_InsufficientOutput();
+
+    /** @notice Thrown when no fees are to be collected */
+    error Market_NoFeesToCollect();
+
+    /** @notice Thrown when fee recipient is invalid */
+    error Market_InvalidFeeRecipient();
 
     /////////////////
     /// VARIABLES ///

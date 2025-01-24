@@ -47,6 +47,8 @@ contract Market is IMarket, ReentrancyGuard {
     uint256 public winningOutcomeTokenId;
     /// @inheritdoc IMarket
     string[] public outcomeDescriptions;
+    /// @notice Accumulated protocol fees
+    uint256 public accumulatedFees;
 
     constructor(
         string memory _question,
@@ -55,10 +57,7 @@ contract Market is IMarket, ReentrancyGuard {
         uint256 _virtualLiquidity,
         uint256 _protocolFee,
         string[] memory _outcomeDescriptions
-    ) {
-        if (_endTime <= block.timestamp) revert Market_InvalidEndTime();
-        if (_outcomeDescriptions.length < 2) revert Market_InvalidOutcomeCount();
-        
+    ) {        
         question = _question;
         endTime = _endTime;
         collateralToken = IERC20(_collateralToken);
@@ -74,6 +73,7 @@ contract Market is IMarket, ReentrancyGuard {
         );
 
         // Initialize virtual outcomePools with equal liquidity
+        //@note eventually should allow Creator AI to set these so they can set the bet ratios -> maybe another agent could do this.
         for(uint256 i = 0; i < _outcomeDescriptions.length; i++) {
             outcomePools[i] = Pool({
                 virtualLiquidity: _virtualLiquidity,
@@ -90,14 +90,13 @@ contract Market is IMarket, ReentrancyGuard {
 
     /// @inheritdoc IMarket
     function getOutcomeDescription(uint256 outcomeIndex) external view returns (string memory _description) {
-        require(outcomeIndex < outcomeDescriptions.length, "Invalid outcome index");
+        if (outcomeIndex >= outcomeDescriptions.length) revert Market_InvalidOutcome();
         return outcomeDescriptions[outcomeIndex];
     }
 
     /// @inheritdoc IMarket
     function extendMarket(uint256 _endTime) external {
         if (msg.sender != creator) revert Market_Unauthorized();
-        if (block.timestamp <= endTime) revert Market_TradingNotEnded();
         if (_endTime <= block.timestamp) revert Market_InvalidEndTime();
 
         uint256 _oldEndTime = endTime;
@@ -118,23 +117,28 @@ contract Market is IMarket, ReentrancyGuard {
         uint256 priceImpact = calculatePriceImpact(_outcomeId, _collateralAmount);
         if (priceImpact > _maxPriceImpactBps) revert Market_PriceImpactTooHigh();
 
+        // Calculate fee
+        uint256 fee = (_collateralAmount * protocolFee) / 10000;
+        uint256 netCollateral = _collateralAmount - fee;
+        accumulatedFees += fee;
+
         Pool storage pool = outcomePools[_outcomeId];
         
         // Calculate tokens following x * y = k formula
         uint256 totalTokens = pool.virtualLiquidity + pool.realTokens;
-        uint256 buyAmount = totalTokens * _collateralAmount / (totalTokens + _collateralAmount);
+        uint256 buyAmount = totalTokens * netCollateral / (totalTokens + netCollateral);
 
         if (buyAmount < _minTokensOut) revert Market_InsufficientOutput();
 
         // Update pool state
         pool.realTokens += buyAmount;
-        pool.realCollateral += _collateralAmount;
+        pool.realCollateral += netCollateral;
 
         // Mint tokens and transfer collateral
         outcomeToken.mint(msg.sender, _outcomeId, buyAmount);
-        collateralToken.safeTransferFrom(msg.sender, address(this), _collateralAmount);
+        collateralToken.safeTransferFrom(msg.sender, address(this), netCollateral);
 
-        emit TokensBought(msg.sender, _outcomeId, _collateralAmount, buyAmount);
+        emit TokensBought(msg.sender, _outcomeId, netCollateral, buyAmount);
         return buyAmount;
     }
 
@@ -146,7 +150,7 @@ contract Market is IMarket, ReentrancyGuard {
         uint256 _minCollateralOut
     ) external nonReentrant returns (uint256 collateralReturned) {
         if (block.timestamp >= endTime) revert Market_TradingEnded();
-        if (_outcomeId > outcomeDescriptions.length) revert Market_InvalidOutcome();
+        if (_outcomeId >= outcomeDescriptions.length) revert Market_InvalidOutcome();
         
         if (outcomeToken.balanceOf(msg.sender, _outcomeId) < _tokenAmount) revert Market_InsufficientBalance();
 
@@ -155,9 +159,14 @@ contract Market is IMarket, ReentrancyGuard {
         uint256 priceImpact = calculateSellPriceImpact(_outcomeId, _tokenAmount);
         if (priceImpact > _maxPriceImpactBps) revert Market_PriceImpactTooHigh();
 
-        // Calculate collateral following x * y = k formula
+        // Calculate gross collateral
         uint256 totalTokens = pool.virtualLiquidity + pool.realTokens;
-        collateralReturned = _tokenAmount * totalTokens / (totalTokens - _tokenAmount);
+        uint256 grossCollateral = _tokenAmount * totalTokens / (totalTokens - _tokenAmount);
+        
+        // Calculate fee and net collateral
+        uint256 fee = (grossCollateral * protocolFee) / 10000;
+        accumulatedFees += fee;
+        collateralReturned = grossCollateral - fee;
         
         if (collateralReturned < _minCollateralOut) revert Market_InsufficientOutput();
 
@@ -187,6 +196,7 @@ contract Market is IMarket, ReentrancyGuard {
     }
 
     /// @inheritdoc IMarket
+    //@note probaly need to decrement collateral when it is taken out
     function claimWinnings() external nonReentrant returns (uint256) {
         if (block.timestamp < endTime) revert Market_TradingNotEnded();
         if (outcome != Outcome.Resolved) revert Market_NoOutcome();
@@ -219,6 +229,7 @@ contract Market is IMarket, ReentrancyGuard {
     }
 
     /// @inheritdoc IMarket
+    //@note might want to double check this
     function getPrice(uint256 _outcomeId) public view returns (uint256) {
         if (_outcomeId > outcomeDescriptions.length) revert Market_InvalidOutcome();
         
@@ -227,6 +238,7 @@ contract Market is IMarket, ReentrancyGuard {
         
         return (totalTokens * _SCALE) / getTotalLiquidity();
     }
+
 
     /// @inheritdoc IMarket
     function getMarketInfo() external view returns (
@@ -249,7 +261,7 @@ contract Market is IMarket, ReentrancyGuard {
         uint256 totalRefund = 0;
         
         // Check all outcome tokens the user holds
-        for(uint256 i = 0; i <= outcomeDescriptions.length; i++) {
+        for(uint256 i = 0; i < outcomeDescriptions.length; i++) {
             Pool storage pool = outcomePools[i];
             uint256 tokenBalance = outcomeToken.balanceOf(msg.sender, i);
             
@@ -334,6 +346,20 @@ contract Market is IMarket, ReentrancyGuard {
 
         outcome = Outcome.Invalid;
         emit MarketInvalidated();
+    }
+
+    /// @notice Allows creator to collect accumulated protocol fees
+    function collectFees() external returns (uint256) {
+        if (msg.sender != creator) revert Market_Unauthorized();
+        if (accumulatedFees == 0) revert Market_NoFeesToCollect();
+
+        uint256 feesToCollect = accumulatedFees;
+        accumulatedFees = 0;
+        
+        collateralToken.safeTransfer(creator, feesToCollect);
+        
+        emit FeesCollected(creator, feesToCollect);
+        return feesToCollect;
     }
 
     

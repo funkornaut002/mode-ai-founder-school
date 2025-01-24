@@ -23,3 +23,9 @@ crytic-export
 
 # Echidna corpus
 test/invariants/fuzz/echidna_coverage
+
+# Smock
+test/smock/
+
+# Notes
+CursorNotes.md

@@ -24,7 +24,7 @@ contract MarketFactory is IMarketFactory, Pausable, Ownable {
         if (!isMarketCreator[msg.sender]) revert MarketFactory_Unauthorized();
         _;
     }
-
+    //@note should probaly have a whitelist of valid collateral tokens
     /// @inheritdoc IMarketFactory
     //@note No maximum limit on _virtualLiquidity, No validation on _question length, No validation on _outcomeDescriptions individual lengths
     function createMarket(
@@ -37,7 +37,7 @@ contract MarketFactory is IMarketFactory, Pausable, Ownable {
     ) external whenNotPaused onlyMarketCreator returns (address marketAddress) {
         if (bytes(_question).length == 0) revert MarketFactory_InvalidQuestion();
         if (_endTime <= block.timestamp + MIN_MARKET_DURATION) revert MarketFactory_InvalidEndTime();
-        if (_collateralToken == address(0)) revert MarketFactory_InvalidToken(); //@note should probaly have a whitelist of valid collateral tokens
+        if (_collateralToken == address(0)) revert MarketFactory_InvalidToken(); 
         if (_protocolFee > 1000) revert MarketFactory_FeeTooHigh(); // Max 10%
         if (_outcomeDescriptions.length < 2 || _outcomeDescriptions.length > 10) revert MarketFactory_InvalidOutcomeCount();
 

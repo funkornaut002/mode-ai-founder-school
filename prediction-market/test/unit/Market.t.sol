@@ -9,7 +9,7 @@ import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import {Market} from "contracts/Market.sol";
 
-contract UnitMarketTestWithDocs is Test {
+contract UnitMarketTest is Test {
     MockMarket public market;
     MockOutcomeToken public outcomeToken;
     IERC20 public collateralToken;
@@ -171,7 +171,7 @@ contract UnitMarketTestWithDocs is Test {
     }
 
     function test_SellWhenUserHasInsufficientBalance(uint256 tokenAmount) external {
-        tokenAmount = bound(tokenAmount, 1e18, 1000000e18);
+        tokenAmount = bound(tokenAmount, 1e18, type(uint128).max);
         uint256 outcomeId = 0;
 
         // Mock zero balance
@@ -187,7 +187,7 @@ contract UnitMarketTestWithDocs is Test {
     }
 
     function test_SellWhenPriceImpactExceedsMax(uint256 tokenAmount) external {
-        tokenAmount = bound(tokenAmount, 1e18, 1000000e18);
+        tokenAmount = bound(tokenAmount, 1e18, type(uint128).max);
         uint256 maxPriceImpactBps = 100; // 1%
         uint256 outcomeId = 0;
 
@@ -207,7 +207,7 @@ contract UnitMarketTestWithDocs is Test {
     }
 
     function test_SellWhenOutputIsLessThanMinCollateralOut(uint256 tokenAmount, uint256 minCollateralOut) external {
-        tokenAmount = bound(tokenAmount, 1e18, 1000000e18);
+        tokenAmount = bound(tokenAmount, 1e18, type(uint128).max);
         minCollateralOut = bound(minCollateralOut, 2e18, 1000000e18);
         uint256 outcomeId = 0;
 
@@ -228,7 +228,7 @@ contract UnitMarketTestWithDocs is Test {
     }
 
     function test_SellWhenParametersAreValid(uint256 tokenAmount) external {
-        tokenAmount = bound(tokenAmount, 1e18, 1000000e18);
+        tokenAmount = bound(tokenAmount, 1e18, type(uint128).max);
         uint256 maxPriceImpactBps = 1000; // 10%
         uint256 minCollateralOut = 1e18;
         uint256 outcomeId = 0;
@@ -467,7 +467,7 @@ contract UnitMarketTestWithDocs is Test {
     }
 
     function test_ClaimInvalidMarketWhenParametersAreValid(uint256 tokenAmount) external {
-        tokenAmount = bound(tokenAmount, 1e18, 1000000e18);
+        tokenAmount = bound(tokenAmount, 1e18, type(uint128).max);
         uint256 outcomeId = 0;
         uint256 poolCollateral = 1000e18;
         uint256 poolTokens = 100e18;
@@ -643,7 +643,7 @@ contract UnitMarketTestWithDocs is Test {
     }
 
     function test_CalculateSellPriceImpactWhenOutcomeIdIsValid(uint256 tokenAmount) external {
-        tokenAmount = bound(tokenAmount, 1e18, 1000000e18);
+        tokenAmount = bound(tokenAmount, 1e18, type(uint128).max);
         uint256 outcomeId = 0;
         uint256 expectedPriceImpact = 100; // 1%
 

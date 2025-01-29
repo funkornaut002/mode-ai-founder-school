@@ -4,14 +4,14 @@ import { RedisClient } from "@elizaos/adapter-redis";
 import { SqliteDatabaseAdapter } from "@elizaos/adapter-sqlite";
 import { SupabaseDatabaseAdapter } from "@elizaos/adapter-supabase";
 import { AutoClientInterface } from "@elizaos/client-auto";
-import { DiscordClientInterface } from "@elizaos/client-discord";
+// import { DiscordClientInterface } from "@elizaos/client-discord";
 import { FarcasterAgentClient } from "@elizaos/client-farcaster";
 import { LensAgentClient } from "@elizaos/client-lens";
 import { SlackClientInterface } from "@elizaos/client-slack";
 import { TelegramClientInterface } from "@elizaos/client-telegram";
 import { TwitterClientInterface } from "@elizaos/client-twitter";
 // import { ReclaimAdapter } from "@elizaos/plugin-reclaim";
-import { DirectClient } from "@elizaos/client-direct";
+// import { DirectClient } from "@elizaos/client-direct";
 import { PrimusAdapter } from "@elizaos/plugin-primus";
 
 import {
@@ -102,7 +102,8 @@ import net from "net";
 import path from "path";
 import { fileURLToPath } from "url";
 import yargs from "yargs";
-import { dominosPlugin } from "@elizaos/plugin-dominos";
+// import { dominosPlugin } from "@elizaos/plugin-dominos";
+import createSentientPlugin from "@elizaos/plugin-sentient";
 
 const __filename = fileURLToPath(import.meta.url); // get the resolved path to the file
 const __dirname = path.dirname(__filename); // get the name of the directory
@@ -565,10 +566,10 @@ export async function initializeClients(
         if (autoClient) clients.auto = autoClient;
     }
 
-    if (clientTypes.includes(Clients.DISCORD)) {
-        const discordClient = await DiscordClientInterface.start(runtime);
-        if (discordClient) clients.discord = discordClient;
-    }
+    // if (clientTypes.includes(Clients.DISCORD)) {
+    //     const discordClient = await DiscordClientInterface.start(runtime);
+    //     if (discordClient) clients.discord = discordClient;
+    // }
 
     if (clientTypes.includes(Clients.TELEGRAM)) {
         const telegramClient = await TelegramClientInterface.start(runtime);
@@ -733,28 +734,65 @@ export async function createAgent(
         modelProvider: character.modelProvider,
         evaluators: [],
         character,
-        // character.plugins are handled when clients are added
         plugins: [
             bootstrapPlugin,
-            getSecret(character, "CONFLUX_CORE_PRIVATE_KEY")
-                ? confluxPlugin
-                : null,
-            nodePlugin,
-            getSecret(character, "TAVILY_API_KEY") ? webSearchPlugin : null,
-            getSecret(character, "SOLANA_PUBLIC_KEY") ||
-            (getSecret(character, "WALLET_PUBLIC_KEY") &&
-                !getSecret(character, "WALLET_PUBLIC_KEY")?.startsWith("0x"))
-                ? solanaPlugin
-                : null,
-            getSecret(character, "SOLANA_PRIVATE_KEY")
-                ? solanaAgentkitPlguin
-                : null,
-            getSecret(character, "AUTONOME_JWT_TOKEN") ? autonomePlugin : null,
-            (getSecret(character, "NEAR_ADDRESS") ||
-                getSecret(character, "NEAR_WALLET_PUBLIC_KEY")) &&
-            getSecret(character, "NEAR_WALLET_SECRET_KEY")
-                ? nearPlugin
-                : null,
+            // Force Sentient plugin to load first with Mode Testnet
+            (() => {
+                const factoryAddress = getSecret(
+                    character,
+                    "PREDICTION_MARKET_FACTORY"
+                );
+                const evmPrivateKey = getSecret(character, "EVM_PRIVATE_KEY");
+
+                if (!factoryAddress || !evmPrivateKey) {
+                    elizaLogger.warn(
+                        "❌ Missing required settings for Sentient plugin"
+                    );
+                    return null;
+                }
+
+                elizaLogger.info(
+                    "🎲 Initializing Sentient Prediction Markets plugin..."
+                );
+
+                // Force Mode Testnet settings
+                const modeTestnet = {
+                    id: 919,
+                    name: "Mode Testnet",
+                    network: "mode-testnet",
+                    nativeCurrency: {
+                        name: "ETH",
+                        symbol: "ETH",
+                        decimals: 18,
+                    },
+                    rpcUrls: {
+                        default: { http: ["https://sepolia.mode.network"] },
+                        public: { http: ["https://sepolia.mode.network"] },
+                    },
+                };
+
+                const settings = {
+                    EVM_PROVIDER_URL: "https://sepolia.mode.network",
+                    CHAIN_ID: "919",
+                    PREDICTION_MARKET_FACTORY: factoryAddress,
+                    EVM_PRIVATE_KEY: evmPrivateKey,
+                    CHAIN: modeTestnet,
+                };
+
+                elizaLogger.debug("🎲 Plugin Settings:", {
+                    factoryAddress,
+                    network: settings.CHAIN.name,
+                    chainId: settings.CHAIN_ID,
+                });
+
+                const plugin = createSentientPlugin(
+                    (key: string) => settings[key]
+                );
+
+                elizaLogger.info("🎲 Plugin created with Mode Testnet chain");
+                return plugin;
+            })(),
+            // Move EVM plugin after Sentient plugin
             getSecret(character, "EVM_PUBLIC_KEY") ||
             (getSecret(character, "WALLET_PUBLIC_KEY") &&
                 getSecret(character, "WALLET_PUBLIC_KEY")?.startsWith("0x"))

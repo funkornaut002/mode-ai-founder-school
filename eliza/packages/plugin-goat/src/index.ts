@@ -1,26 +1,21 @@
-import { type Plugin } from "@elizaos/core";
+import type { Plugin } from "@elizaos/core";
 import { getOnChainActions } from "./actions";
 import { getWalletClient, getWalletProvider } from "./wallet";
 
-const createPredictionMarketPlugin = async (
+async function createGoatPlugin(
     getSetting: (key: string) => string | undefined
-): Promise<Plugin> => {
+): Promise<Plugin> {
     const walletClient = getWalletClient(getSetting);
-    if (!walletClient) {
-        throw new Error("Failed to initialize wallet client");
-    }
-
     const actions = await getOnChainActions(walletClient);
 
     return {
-        name: "Mode Prediction Markets",
-        description:
-            "Create and trade in AI-powered prediction markets on Mode Network",
+        name: "[GOAT] Onchain Actions",
+        description: "Mode integration plugin",
         providers: [getWalletProvider(walletClient)],
         evaluators: [],
         services: [],
         actions: actions,
     };
-};
+}
 
-export default createPredictionMarketPlugin;
+export default createGoatPlugin;

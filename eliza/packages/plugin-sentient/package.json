@@ -1,0 +1,41 @@
+{
+    "name": "@elizaos/plugin-sentient",
+    "version": "0.1.0",
+    "type": "module",
+    "main": "dist/index.js",
+    "module": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "require": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "dependencies": {
+        "@elizaos/core": "workspace:*",
+        "@elizaos/plugin-tee": "workspace:*",
+        "@elizaos/plugin-evm": "workspace:*",
+        "@goat-sdk/wallet-viem": "^0.1.0",
+        "viem": "^2.0.0",
+        "@lifi/sdk": "3.4.1",
+        "@lifi/types": "16.3.0",
+        "@lifi/data-types": "5.15.5"
+    },
+    "devDependencies": {
+        "tsup": "8.3.5",
+        "typescript": "^5.0.0"
+    },
+    "scripts": {
+        "build": "tsup --format esm --dts",
+        "dev": "tsup --format esm --dts --watch",
+        "test": "vitest run",
+        "lint": "eslint --fix  --cache ."
+    },
+    "peerDependencies": {
+        "whatwg-url": "7.1.0"
+    }
+}

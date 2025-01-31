@@ -62,7 +62,6 @@ import { confluxPlugin } from "@elizaos/plugin-conflux";
 import { createCosmosPlugin } from "@elizaos/plugin-cosmos";
 import { cronosZkEVMPlugin } from "@elizaos/plugin-cronoszkevm";
 import { echoChambersPlugin } from "@elizaos/plugin-echochambers";
-import { evmPlugin } from "@elizaos/plugin-evm";
 import { flowPlugin } from "@elizaos/plugin-flow";
 import { fuelPlugin } from "@elizaos/plugin-fuel";
 import { genLayerPlugin } from "@elizaos/plugin-genlayer";
@@ -84,6 +83,7 @@ import { teeLogPlugin } from "@elizaos/plugin-tee-log";
 import { teeMarlinPlugin } from "@elizaos/plugin-tee-marlin";
 import { tonPlugin } from "@elizaos/plugin-ton";
 import { webSearchPlugin } from "@elizaos/plugin-web-search";
+import { evmPlugin } from "@elizaos/plugin-evm";
 
 import { giphyPlugin } from "@elizaos/plugin-giphy";
 import { letzAIPlugin } from "@elizaos/plugin-letzai";
@@ -94,7 +94,7 @@ import { zksyncEraPlugin } from "@elizaos/plugin-zksync-era";
 import { OpacityAdapter } from "@elizaos/plugin-opacity";
 import { openWeatherPlugin } from "@elizaos/plugin-open-weather";
 import { stargazePlugin } from "@elizaos/plugin-stargaze";
-import { akashPlugin } from "@elizaos/plugin-akash";
+// import { akashPlugin } from "@elizaos/plugin-akash";
 import { quaiPlugin } from "@elizaos/plugin-quai";
 import Database from "better-sqlite3";
 import fs from "fs";
@@ -103,7 +103,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import yargs from "yargs";
 // import { dominosPlugin } from "@elizaos/plugin-dominos";
-import createSentientPlugin from "@elizaos/plugin-sentient";
+import { sentientPlugin } from "@elizaos/plugin-sentient";
 
 const __filename = fileURLToPath(import.meta.url); // get the resolved path to the file
 const __dirname = path.dirname(__filename); // get the name of the directory
@@ -755,47 +755,18 @@ export async function createAgent(
                     "🎲 Initializing Sentient Prediction Markets plugin..."
                 );
 
-                // Force Mode Testnet settings
-                const modeTestnet = {
-                    id: 919,
-                    name: "Mode Testnet",
-                    network: "mode-testnet",
-                    nativeCurrency: {
-                        name: "ETH",
-                        symbol: "ETH",
-                        decimals: 18,
-                    },
-                    rpcUrls: {
-                        default: { http: ["https://sepolia.mode.network"] },
-                        public: { http: ["https://sepolia.mode.network"] },
-                    },
-                };
-
-                const settings = {
-                    EVM_PROVIDER_URL: "https://sepolia.mode.network",
-                    CHAIN_ID: "919",
-                    PREDICTION_MARKET_FACTORY: factoryAddress,
-                    EVM_PRIVATE_KEY: evmPrivateKey,
-                    CHAIN: modeTestnet,
-                };
-
                 elizaLogger.debug("🎲 Plugin Settings:", {
                     factoryAddress,
-                    network: settings.CHAIN.name,
-                    chainId: settings.CHAIN_ID,
+                    network: "Mode Testnet",
+                    chainId: 919,
                 });
 
-                const plugin = createSentientPlugin(
-                    (key: string) => settings[key]
-                );
-
                 elizaLogger.info("🎲 Plugin created with Mode Testnet chain");
-                return plugin;
+                return sentientPlugin;
             })(),
-            // Move EVM plugin after Sentient plugin
-            getSecret(character, "EVM_PUBLIC_KEY") ||
-            (getSecret(character, "WALLET_PUBLIC_KEY") &&
-                getSecret(character, "WALLET_PUBLIC_KEY")?.startsWith("0x"))
+            // Disable EVM plugin when using Sentient
+            getSecret(character, "EVM_PUBLIC_KEY") &&
+            !getSecret(character, "PREDICTION_MARKET_FACTORY")
                 ? evmPlugin
                 : null,
             getSecret(character, "COSMOS_RECOVERY_PHRASE") &&
@@ -912,10 +883,10 @@ export async function createAgent(
             getSecret(character, "HYPERLIQUID_TESTNET")
                 ? hyperliquidPlugin
                 : null,
-            getSecret(character, "AKASH_MNEMONIC") &&
-            getSecret(character, "AKASH_WALLET_ADDRESS")
-                ? akashPlugin
-                : null,
+            // getSecret(character, "AKASH_MNEMONIC") &&
+            // getSecret(character, "AKASH_WALLET_ADDRESS")
+            //     ? akashPlugin
+            //     : null,
             getSecret(character, "QUAI_PRIVATE_KEY") ? quaiPlugin : null,
         ].filter(Boolean),
         providers: [],

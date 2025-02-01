@@ -1,6 +1,6 @@
 {
     "name": "Oracle",
-    "plugins": ["@elizaos/plugin-goat"],
+    "plugins": ["@elizaos/plugin-sentient"],
     "clients": ["telegram"],
     "modelProvider": "openai",
     "settings": {

@@ -1,6 +1,5 @@
 import type { Action } from "@elizaos/core";
 import {
-    ActionExample,
     Content,
     HandlerCallback,
     IAgentRuntime,
@@ -12,24 +11,22 @@ import {
     generateObject,
 } from "@elizaos/core";
 import { validateSentientConfig } from "../environment";
-import { useGetWalletClient } from "../hooks";
+import { useGetWalletClient } from "../hooks/useGetWalletClient";
 import { z } from "zod";
-import { isAddress, parseUnits } from "viem";
+import { isAddress, parseUnits, createPublicClient, http } from "viem";
 import { FACTORY_ABI } from "../constants/abi";
 import { chain } from "../providers/wallet";
 
 const CreateMarketSchema = z.object({
     question: z.string(),
-    description: z.string(),
     endDate: z.number(),
     initialLiquidity: z.number().default(10),
     protocolFee: z.number().default(1),
-    outcomeDescriptions: z.array(z.string()),
+    outcomeDescriptions: z.array(z.string()).default(["Yes", "No"]),
 });
 
 export interface CreateMarketContent extends Content {
     question: string;
-    description: string;
     endDate: number;
     initialLiquidity: number;
     protocolFee: number;
@@ -42,7 +39,6 @@ Example response:
 \`\`\`json
 {
     "question": "Will ETH reach $3000 by end of Q1 2024?",
-    "description": "Market to predict if ETH will reach or exceed $3000 before March 31st, 2024",
     "endDate": 1711929599000,
     "initialLiquidity": 100,
     "protocolFee": 1,
@@ -54,11 +50,10 @@ Example response:
 
 Given the recent messages, extract the following information about the requested market creation:
 - Question for the market
-- Description of what is being predicted
 - End date (timestamp in milliseconds)
-- Initial liquidity amount in MODE tokens
+- Initial liquidity amount in MODE tokens (default to 10)
 - Protocol fee percentage (default to 1)
-- Outcome descriptions (array of strings, usually ["Yes", "No"])
+- Outcome descriptions (array of strings, default to ["Yes", "No"])
 
 Respond with a JSON markdown block containing only the extracted values.`;
 
@@ -109,8 +104,12 @@ export const createMarketAction: Action = {
                 })
             ).object as unknown as CreateMarketContent;
 
-            // Get wallet client
+            // Get wallet client and public client
             const walletClient = await useGetWalletClient(runtime);
+            const publicClient = createPublicClient({
+                chain,
+                transport: http(),
+            });
 
             // Get factory address
             const factoryAddress = runtime.getSetting(
@@ -119,6 +118,35 @@ export const createMarketAction: Action = {
             if (!isAddress(factoryAddress)) {
                 throw new Error("Invalid factory address");
             }
+
+            // Get MIN_MARKET_DURATION from contract
+            const minDuration = (await publicClient.readContract({
+                address: factoryAddress as `0x${string}`,
+                abi: FACTORY_ABI,
+                functionName: "MIN_MARKET_DURATION",
+            })) as bigint;
+
+            // Convert endDate from milliseconds to seconds and validate
+            const endTimeSeconds = Math.floor(content.endDate / 1000);
+            const currentTimeSeconds = Math.floor(Date.now() / 1000);
+            const duration = endTimeSeconds - currentTimeSeconds;
+
+            if (duration < Number(minDuration)) {
+                throw new Error(
+                    `Market duration must be at least ${minDuration} seconds from now`
+                );
+            }
+
+            elizaLogger.log("Creating market with parameters:", {
+                question: content.question,
+                endTimeSeconds,
+                currentTimeSeconds,
+                duration,
+                minDuration: minDuration.toString(),
+                initialLiquidity: content.initialLiquidity,
+                protocolFee: content.protocolFee,
+                outcomeDescriptions: content.outcomeDescriptions,
+            });
 
             // Create market transaction
             const hash = await walletClient.writeContract({
@@ -129,10 +157,10 @@ export const createMarketAction: Action = {
                 account: walletClient.account,
                 args: [
                     content.question,
-                    content.description,
-                    BigInt(content.endDate),
+                    BigInt(endTimeSeconds),
+                    "0xf8865d1d66451518fb9117cb1d0e4b0811a42823", // MODE token address
                     parseUnits(content.initialLiquidity.toString(), 18),
-                    content.protocolFee,
+                    BigInt(content.protocolFee),
                     content.outcomeDescriptions,
                 ],
             });
@@ -143,7 +171,7 @@ export const createMarketAction: Action = {
 
             if (callback) {
                 callback({
-                    text: `Market created successfully!\nQuestion: ${content.question}\nTransaction: ${hash}`,
+                    text: `Market created successfully!\nQuestion: ${content.question}\nEnd Time: ${new Date(content.endDate).toLocaleString()}\nInitial Liquidity: ${content.initialLiquidity} MODE\nTransaction: ${hash}`,
                     content: { hash },
                 });
             }
@@ -163,24 +191,12 @@ export const createMarketAction: Action = {
     examples: [
         [
             {
-                user: "{{user1}}",
+                user: "user",
                 content: {
-                    text: "Create a market for ETH price prediction",
-                },
-            },
-            {
-                user: "{{agent}}",
-                content: {
-                    text: "I'll create a market to predict ETH price.",
+                    text: "Create a prediction market for ETH price reaching $3000 by end of Q1 2024",
                     action: "CREATE_MARKET",
                 },
             },
-            {
-                user: "{{agent}}",
-                content: {
-                    text: "Successfully created market:\nQuestion: Will ETH reach $3000 by end of Q1 2024?\nTransaction: 0x123...",
-                },
-            },
         ],
-    ] as ActionExample[][],
+    ],
 };

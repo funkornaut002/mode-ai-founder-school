@@ -1,6 +1,12 @@
-import { IAgentRuntime, Memory, Provider, State, elizaLogger } from "@elizaos/core";
-import axios from 'axios';
-import { getApiConfig, validateCoingeckoConfig } from '../environment';
+import {
+    IAgentRuntime,
+    Memory,
+    Provider,
+    State,
+    elizaLogger,
+} from "@elizaos/core";
+import axios from "axios";
+import { getApiConfig, validateCoingeckoConfig } from "../environment";
 
 interface CoinItem {
     id: string;
@@ -8,27 +14,27 @@ interface CoinItem {
     name: string;
 }
 
-const CACHE_KEY = 'coingecko:coins';
-const CACHE_TTL = 5 * 60; // 5 minutes
+const CACHE_KEY = "coingecko:coins";
+const CACHE_TTL = 1 * 60; // 5 minutes
 const MAX_RETRIES = 3;
 
-async function fetchCoins(runtime: IAgentRuntime, includePlatform: boolean = false): Promise<CoinItem[]> {
+async function fetchCoins(
+    runtime: IAgentRuntime,
+    includePlatform: boolean = false
+): Promise<CoinItem[]> {
     const config = await validateCoingeckoConfig(runtime);
     const { baseUrl, apiKey } = getApiConfig(config);
 
-    const response = await axios.get<CoinItem[]>(
-        `${baseUrl}/coins/list`,
-        {
-            params: {
-                include_platform: includePlatform
-            },
-            headers: {
-                'accept': 'application/json',
-                'x-cg-pro-api-key': apiKey
-            },
-            timeout: 5000 // 5 second timeout
-        }
-    );
+    const response = await axios.get<CoinItem[]>(`${baseUrl}/coins/list`, {
+        params: {
+            include_platform: includePlatform,
+        },
+        headers: {
+            accept: "application/json",
+            "x-cg-demo-api-key": apiKey,
+        },
+        timeout: 5000, // 5 second timeout
+    });
 
     if (!response.data?.length) {
         throw new Error("Invalid coins data received");
@@ -37,7 +43,10 @@ async function fetchCoins(runtime: IAgentRuntime, includePlatform: boolean = fal
     return response.data;
 }
 
-async function fetchWithRetry(runtime: IAgentRuntime, includePlatform: boolean = false): Promise<CoinItem[]> {
+async function fetchWithRetry(
+    runtime: IAgentRuntime,
+    includePlatform: boolean = false
+): Promise<CoinItem[]> {
     let lastError: Error | null = null;
 
     for (let i = 0; i < MAX_RETRIES; i++) {
@@ -46,14 +55,19 @@ async function fetchWithRetry(runtime: IAgentRuntime, includePlatform: boolean =
         } catch (error) {
             lastError = error;
             elizaLogger.error(`Coins fetch attempt ${i + 1} failed:`, error);
-            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+            await new Promise((resolve) => setTimeout(resolve, 1000 * (i + 1)));
         }
     }
 
-    throw lastError || new Error("Failed to fetch coins after multiple attempts");
+    throw (
+        lastError || new Error("Failed to fetch coins after multiple attempts")
+    );
 }
 
-async function getCoins(runtime: IAgentRuntime, includePlatform: boolean = false): Promise<CoinItem[]> {
+async function getCoins(
+    runtime: IAgentRuntime,
+    includePlatform: boolean = false
+): Promise<CoinItem[]> {
     try {
         // Try to get from cache first
         const cached = await runtime.cacheManager.get<CoinItem[]>(CACHE_KEY);
@@ -65,7 +79,9 @@ async function getCoins(runtime: IAgentRuntime, includePlatform: boolean = false
         const coins = await fetchWithRetry(runtime, includePlatform);
 
         // Cache the result
-        await runtime.cacheManager.set(CACHE_KEY, coins, { expires: CACHE_TTL });
+        await runtime.cacheManager.set(CACHE_KEY, coins, {
+            expires: CACHE_TTL,
+        });
 
         return coins;
     } catch (error) {
@@ -76,19 +92,25 @@ async function getCoins(runtime: IAgentRuntime, includePlatform: boolean = false
 
 function formatCoinsContext(coins: CoinItem[]): string {
     const popularCoins = [
-        'bitcoin', 'ethereum', 'binancecoin', 'ripple',
-        'cardano', 'solana', 'polkadot', 'dogecoin'
+        "bitcoin",
+        "ethereum",
+        "binancecoin",
+        "ripple",
+        "cardano",
+        "solana",
+        "polkadot",
+        "dogecoin",
     ];
 
     const popular = coins
-        .filter(c => popularCoins.includes(c.id))
-        .map(c => `${c.name} (${c.symbol.toUpperCase()}) - ID: ${c.id}`);
+        .filter((c) => popularCoins.includes(c.id))
+        .map((c) => `${c.name} (${c.symbol.toUpperCase()}) - ID: ${c.id}`);
 
     return `
 Available cryptocurrencies:
 
 Popular coins:
-${popular.map(c => `- ${c}`).join('\n')}
+${popular.map((c) => `- ${c}`).join("\n")}
 
 Total available coins: ${coins.length}
 
@@ -97,7 +119,11 @@ You can use these coin IDs when querying specific cryptocurrency data.
 }
 
 export const coinsProvider: Provider = {
-    get: async (runtime: IAgentRuntime, message: Memory, state?: State): Promise<string> => {
+    get: async (
+        runtime: IAgentRuntime,
+        message: Memory,
+        state?: State
+    ): Promise<string> => {
         try {
             const coins = await getCoins(runtime);
             return formatCoinsContext(coins);
@@ -105,10 +131,13 @@ export const coinsProvider: Provider = {
             elizaLogger.error("Coins provider error:", error);
             return "Cryptocurrency list is temporarily unavailable. Please try again later.";
         }
-    }
+    },
 };
 
 // Helper function for actions to get raw coins data
-export async function getCoinsData(runtime: IAgentRuntime, includePlatform: boolean = false): Promise<CoinItem[]> {
+export async function getCoinsData(
+    runtime: IAgentRuntime,
+    includePlatform: boolean = false
+): Promise<CoinItem[]> {
     return getCoins(runtime, includePlatform);
 }

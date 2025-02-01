@@ -1,210 +1,221 @@
-import type { IAgentRuntime, Memory, State } from "@elizaos/core";
-import { decodeEventLog, parseAbiItem, createPublicClient, http } from "viem";
-import type { Market, Address } from "../types";
+import type { Action } from "@elizaos/core";
+import {
+    HandlerCallback,
+    IAgentRuntime,
+    Memory,
+    State,
+    elizaLogger,
+} from "@elizaos/core";
+import { createPublicClient, http, isAddress } from "viem";
+import type { Address } from "../types";
 import { FACTORY_ABI, MARKET_ABI } from "../constants/abi";
 import { chain } from "../providers/wallet";
+import { validateSentientConfig } from "../environment";
+
+// Define the Market type to match our actual data structure
+type Market = {
+    marketId: `0x${string}`;
+    marketAddress: `0x${string}`;
+    question: string;
+    endTime: bigint;
+    collateralToken: `0x${string}`;
+    outcome: number;
+};
 
 function debugLog(section: string, data: any) {
-    console.log(`\n=== ${section} ===`);
-    console.log(JSON.stringify(data, null, 2));
-    console.log("=".repeat(20), "\n");
+    elizaLogger.log(`\n=== ${section} ===`);
+    // Convert BigInt to string before stringifying
+    const seen = new WeakSet();
+    const replacer = (key: string, value: any) => {
+        if (typeof value === "bigint") {
+            return value.toString();
+        }
+        if (typeof value === "object" && value !== null) {
+            if (seen.has(value)) {
+                return "[Circular]";
+            }
+            seen.add(value);
+        }
+        return value;
+    };
+    elizaLogger.log(JSON.stringify(data, replacer, 2));
 }
 
-export const getMarketsAction = {
-    name: "GET_MARKETS",
-    description: "Get all prediction markets on Mode Network",
+// Helper function to safely format date
+function formatDate(timestamp: bigint | undefined | null): string {
+    if (timestamp === undefined || timestamp === null) return "N/A";
+    try {
+        return new Date(Number(timestamp) * 1000).toLocaleString();
+    } catch (error) {
+        elizaLogger.error("Error formatting date:", error);
+        return "N/A";
+    }
+}
+
+export const getMarketsAction: Action = {
+    name: "GET_MARKET",
+    description: "Get market details by ID on Mode Network",
     similes: [
         "GET_MARKETS",
-        "LIST_MARKETS",
-        "SHOW_MARKETS",
-        "VIEW_MARKETS",
-        "DISPLAY_MARKETS",
-        "FETCH_MARKETS",
-        "listmarkets",
-        "list_markets",
-        "list markets",
-        "show markets",
-        "view markets",
-        "get markets",
-        "display markets",
-        "fetch markets",
+        "SHOW_MARKET",
+        "VIEW_MARKET",
+        "DISPLAY_MARKET",
+        "FETCH_MARKET",
+        "getmarket",
+        "get_market",
+        "get market",
+        "show market",
+        "view market",
+        "display market",
+        "fetch market",
+        "MARKET_INFO",
+        "MARKET_DETAILS",
+        "market info",
+        "market details",
     ],
-    examples: [
-        [
-            {
-                user: "user",
-                content: {
-                    text: "Show me all prediction markets",
-                    action: "GET_MARKETS",
-                },
-            },
-        ],
-    ],
+    validate: async (runtime: IAgentRuntime) => {
+        try {
+            await validateSentientConfig(runtime);
+            return true;
+        } catch (error) {
+            elizaLogger.error("GET_MARKET validation error:", error);
+            return false;
+        }
+    },
     handler: async (
         runtime: IAgentRuntime,
         message: Memory,
         state: State,
         _options: any,
-        callback?: any
-    ) => {
-        debugLog("GET_MARKETS ACTION START", {
+        callback?: HandlerCallback
+    ): Promise<Market | null> => {
+        debugLog("GET_MARKET ACTION START", {
             timestamp: new Date().toISOString(),
+            messageText: message.content?.text,
         });
 
         try {
+            // Extract market ID from the message
+            const marketIdMatch =
+                message.content?.text?.match(/0x[a-fA-F0-9]{64}/);
+            if (!marketIdMatch) {
+                if (callback) {
+                    await callback({
+                        text: "Please provide a valid market ID hash (64 characters starting with 0x).",
+                        action: "GET_MARKET",
+                        content: null,
+                    });
+                }
+                return null;
+            }
+
+            const marketId = marketIdMatch[0] as `0x${string}`;
+
+            // Initialize public client
             const publicClient = createPublicClient({
                 chain,
                 transport: http(),
             });
 
+            // Get factory address from settings
             const factoryAddress = runtime.getSetting(
                 "PREDICTION_MARKET_FACTORY"
             );
+            if (!factoryAddress || !isAddress(factoryAddress)) {
+                throw new Error("Invalid factory address configuration");
+            }
 
-            debugLog("FETCHING MARKETS", {
+            debugLog("FETCHING MARKET", {
                 factoryAddress,
+                marketId,
                 chainId: chain.id,
             });
 
-            // Get all MarketCreated events
-            const events = await publicClient.getLogs({
-                address: factoryAddress as Address,
-                event: parseAbiItem(
-                    "event MarketCreated(bytes32 marketId, address indexed marketAddress, string question, uint256 endTime, address collateralToken, uint256 virtualLiquidity)"
-                ),
-                fromBlock: 0n,
-                toBlock: "latest",
+            // Get market address using getMarket function
+            const marketAddress = (await publicClient.readContract({
+                address: factoryAddress as `0x${string}`,
+                abi: FACTORY_ABI,
+                functionName: "getMarket",
+                args: [marketId],
+            })) as Address;
+
+            if (
+                !marketAddress ||
+                marketAddress === "0x0000000000000000000000000000000000000000"
+            ) {
+                throw new Error("Market not found");
+            }
+
+            debugLog("FETCHED MARKET ADDRESS", {
+                marketAddress,
             });
 
-            debugLog("MARKET EVENTS FOUND", {
-                count: events.length,
+            // Get market details using getMarketInfo
+            const marketInfo = (await publicClient.readContract({
+                address: marketAddress,
+                abi: MARKET_ABI,
+                functionName: "getMarketInfo",
+            })) as [string, bigint, Address, number];
+
+            const [question, endTime, collateralToken, outcome] = marketInfo;
+
+            debugLog("FETCHED MARKET INFO", {
+                question,
+                endTime: endTime.toString(),
+                collateralToken,
+                outcome,
             });
 
-            // Parse each market event
-            const markets = await Promise.all(
-                events.map(async (event) => {
-                    try {
-                        const decoded = decodeEventLog({
-                            abi: FACTORY_ABI,
-                            data: event.data,
-                            topics: event.topics,
-                        });
-                        if (decoded.eventName === "MarketCreated") {
-                            const args = {
-                                marketId: decoded.args[0] as string,
-                                marketAddress: decoded.args[1] as Address,
-                                question: decoded.args[2] as string,
-                                endTime: decoded.args[3] as bigint,
-                                collateralToken: decoded.args[4] as Address,
-                                virtualLiquidity: decoded.args[5] as bigint,
-                            };
-
-                            // Get additional market info
-                            const marketInfo = (await publicClient.readContract(
-                                {
-                                    address: args.marketAddress,
-                                    abi: MARKET_ABI,
-                                    functionName: "getMarketInfo",
-                                }
-                            )) as [string, bigint, Address, number];
-
-                            return {
-                                id: args.marketId,
-                                address: args.marketAddress,
-                                question: marketInfo[0],
-                                endTime: marketInfo[1],
-                                collateralToken: marketInfo[2],
-                                virtualLiquidity: args.virtualLiquidity,
-                            };
-                        }
-                        return null;
-                    } catch (error) {
-                        console.error("Error parsing market:", error);
-                        return null;
-                    }
-                })
-            );
-
-            const validMarkets = markets.filter((m): m is Market => m !== null);
-            const result = {
-                count: validMarkets.length,
-                markets: validMarkets,
+            const market: Market = {
+                marketId,
+                marketAddress,
+                question,
+                endTime,
+                collateralToken,
+                outcome,
             };
 
             if (callback) {
-                if (result.markets.length === 0) {
-                    await callback({
-                        text: "No prediction markets found on Mode Network.",
-                        action: "GET_MARKETS",
-                        content: result,
-                    });
-                } else {
-                    const marketsText = result.markets
-                        .map(
-                            (m) =>
-                                `\n• Market ${m.id}\n` +
-                                `  Question: '${m.question}'\n` +
-                                `  Address: ${m.address}\n` +
-                                `  End Time: ${new Date(
-                                    Number(m.endTime)
-                                ).toLocaleString()}\n` +
-                                `  Liquidity: ${m.virtualLiquidity} MODE`
-                        )
-                        .join("");
+                const marketText =
+                    `\n• Market ${marketId.slice(0, 10)}...\n` +
+                    `  Question: '${market.question}'\n` +
+                    `  Address: ${market.marketAddress}\n` +
+                    `  End Time: ${formatDate(market.endTime)}\n` +
+                    `  Status: ${outcome === 0 ? "Trading" : outcome === 1 ? "Yes" : "No"}\n` +
+                    `  Collateral: MODE (${market.collateralToken})`;
 
-                    await callback({
-                        text: `📈 Market List:${marketsText}\n\nTotal Markets: ${result.count}`,
-                        action: "GET_MARKETS",
-                        content: result,
-                    });
-                }
+                await callback({
+                    text: `📈 Market Details:${marketText}`,
+                    action: "GET_MARKET",
+                    content: market,
+                });
             }
 
-            return result;
+            return market;
         } catch (error) {
-            debugLog("GET_MARKETS ERROR", {
+            debugLog("GET_MARKET ERROR", {
                 error: error.message,
                 stack: error.stack,
             });
             if (callback) {
                 await callback({
-                    text: `Error getting markets: ${error.message}`,
+                    text: `Error getting market: ${error.message}`,
                     action: "ERROR",
                     content: { error: error.message },
                 });
             }
-            throw error;
+            return null;
         }
     },
-    validate: async (runtime: IAgentRuntime) => {
-        try {
-            const factoryAddress = runtime.getSetting(
-                "PREDICTION_MARKET_FACTORY"
-            );
-            const providerUrl = runtime.getSetting("EVM_PROVIDER_URL");
-
-            if (!factoryAddress || !factoryAddress.startsWith("0x")) {
-                throw new Error(
-                    "Invalid or missing PREDICTION_MARKET_FACTORY address"
-                );
-            }
-
-            if (!providerUrl || !providerUrl.includes("mode.network")) {
-                throw new Error("Invalid or missing Mode Network provider URL");
-            }
-
-            // Verify wallet provider exists
-            const provider = runtime.providers.find(
-                (p) => (p as any).name === "wallet"
-            );
-            if (!provider) {
-                throw new Error("Wallet provider not found");
-            }
-
-            return true;
-        } catch (error) {
-            console.error("GET_MARKETS validation error:", error);
-            return false;
-        }
-    },
+    examples: [
+        [
+            {
+                user: "user",
+                content: {
+                    text: "Show me market 0x7b117239fb5993098323baced4ab297452d3fb903b4803b58f5c3b09018aafe7",
+                    action: "GET_MARKET",
+                },
+            },
+        ],
+    ],
 };

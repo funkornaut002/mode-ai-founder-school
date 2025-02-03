@@ -287,6 +287,11 @@ export const MARKET_ABI = [
     },
     {
         type: "error",
+        name: "Market_InsufficientAllowance",
+        inputs: [],
+    },
+    {
+        type: "error",
         name: "Market_InsufficientBalance",
         inputs: [],
     },

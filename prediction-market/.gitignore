@@ -23,3 +23,13 @@ crytic-export
 
 # Echidna corpus
 test/invariants/fuzz/echidna_coverage
+
+# Smock
+test/smock/
+
+# Tests created with Cursor compareing with docs/no docs
+test/unit/MarketComposerTestsNoDocs.t.sol
+test/unit/MarketComposerTestsWithDocs.t.sol
+
+# Notes
+CursorNotes.md

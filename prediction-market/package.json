@@ -43,5 +43,8 @@
     "lint-staged": ">=10",
     "solhint-community": "4.0.0",
     "sort-package-json": "2.10.0"
+  },
+  "dependencies": {
+    "@defi-wonderland/smock-foundry": "^1.5.0"
   }
 }

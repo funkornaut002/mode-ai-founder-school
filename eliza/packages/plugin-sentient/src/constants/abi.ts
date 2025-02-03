@@ -279,6 +279,73 @@ export const FACTORY_ABI = [
 ];
 
 export const MARKET_ABI = [
+    // Error definitions
+    {
+        type: "error",
+        name: "Market_AlreadyResolved",
+        inputs: [],
+    },
+    {
+        type: "error",
+        name: "Market_InsufficientBalance",
+        inputs: [],
+    },
+    {
+        type: "error",
+        name: "Market_InsufficientOutput",
+        inputs: [],
+    },
+    {
+        type: "error",
+        name: "Market_InvalidEndTime",
+        inputs: [],
+    },
+    {
+        type: "error",
+        name: "Market_InvalidOutcome",
+        inputs: [],
+    },
+    {
+        type: "error",
+        name: "Market_NoFeesToCollect",
+        inputs: [],
+    },
+    {
+        type: "error",
+        name: "Market_NoOutcome",
+        inputs: [],
+    },
+    {
+        type: "error",
+        name: "Market_NoTokens",
+        inputs: [],
+    },
+    {
+        type: "error",
+        name: "Market_NotInvalid",
+        inputs: [],
+    },
+    {
+        type: "error",
+        name: "Market_PriceImpactTooHigh",
+        inputs: [],
+    },
+    {
+        type: "error",
+        name: "Market_TradingEnded",
+        inputs: [],
+    },
+    {
+        type: "error",
+        name: "Market_TradingNotEnded",
+        inputs: [],
+    },
+    {
+        type: "error",
+        name: "Market_Unauthorized",
+        inputs: [],
+    },
+    // Constructor and functions
     {
         inputs: [
             { internalType: "string", name: "_question", type: "string" },
@@ -303,6 +370,263 @@ export const MARKET_ABI = [
         stateMutability: "nonpayable",
         type: "constructor",
     },
+    // Events
+    {
+        type: "event",
+        name: "TokensBought",
+        inputs: [
+            {
+                indexed: true,
+                internalType: "address",
+                name: "buyer",
+                type: "address",
+            },
+            {
+                indexed: true,
+                internalType: "uint256",
+                name: "outcomeId",
+                type: "uint256",
+            },
+            {
+                indexed: false,
+                internalType: "uint256",
+                name: "collateralAmount",
+                type: "uint256",
+            },
+            {
+                indexed: false,
+                internalType: "uint256",
+                name: "tokenAmount",
+                type: "uint256",
+            },
+        ],
+        anonymous: false,
+    },
+    {
+        type: "event",
+        name: "TokensSold",
+        inputs: [
+            {
+                indexed: true,
+                internalType: "address",
+                name: "seller",
+                type: "address",
+            },
+            {
+                indexed: true,
+                internalType: "uint256",
+                name: "outcomeId",
+                type: "uint256",
+            },
+            {
+                indexed: false,
+                internalType: "uint256",
+                name: "tokenAmount",
+                type: "uint256",
+            },
+            {
+                indexed: false,
+                internalType: "uint256",
+                name: "collateralReturned",
+                type: "uint256",
+            },
+        ],
+        anonymous: false,
+    },
+    {
+        type: "event",
+        name: "MarketResolved",
+        inputs: [
+            {
+                indexed: false,
+                internalType: "enum IMarket.Outcome",
+                name: "outcome",
+                type: "uint8",
+            },
+        ],
+        anonymous: false,
+    },
+    {
+        type: "event",
+        name: "MarketInvalidated",
+        inputs: [],
+        anonymous: false,
+    },
+    {
+        type: "event",
+        name: "MarketExtended",
+        inputs: [
+            {
+                indexed: false,
+                internalType: "uint256",
+                name: "oldEndTime",
+                type: "uint256",
+            },
+            {
+                indexed: false,
+                internalType: "uint256",
+                name: "newEndTime",
+                type: "uint256",
+            },
+        ],
+        anonymous: false,
+    },
+    {
+        type: "event",
+        name: "WinningsClaimed",
+        inputs: [
+            {
+                indexed: true,
+                internalType: "address",
+                name: "user",
+                type: "address",
+            },
+            {
+                indexed: false,
+                internalType: "uint256",
+                name: "amount",
+                type: "uint256",
+            },
+        ],
+        anonymous: false,
+    },
+    {
+        type: "event",
+        name: "InvalidMarketClaimed",
+        inputs: [
+            {
+                indexed: true,
+                internalType: "address",
+                name: "user",
+                type: "address",
+            },
+            {
+                indexed: false,
+                internalType: "uint256",
+                name: "amount",
+                type: "uint256",
+            },
+        ],
+        anonymous: false,
+    },
+    {
+        type: "event",
+        name: "FeesCollected",
+        inputs: [
+            {
+                indexed: true,
+                internalType: "address",
+                name: "collector",
+                type: "address",
+            },
+            {
+                indexed: false,
+                internalType: "uint256",
+                name: "amount",
+                type: "uint256",
+            },
+        ],
+        anonymous: false,
+    },
+    // Functions (keep existing function definitions)
+    {
+        inputs: [
+            { internalType: "uint256", name: "_outcomeId", type: "uint256" },
+            {
+                internalType: "uint256",
+                name: "_collateralAmount",
+                type: "uint256",
+            },
+            {
+                internalType: "uint256",
+                name: "_maxPriceImpactBps",
+                type: "uint256",
+            },
+            { internalType: "uint256", name: "_minTokensOut", type: "uint256" },
+        ],
+        name: "buy",
+        outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+        stateMutability: "nonpayable",
+        type: "function",
+    },
+    {
+        inputs: [
+            { internalType: "uint256", name: "_outcomeId", type: "uint256" },
+            {
+                internalType: "uint256",
+                name: "_investmentAmount",
+                type: "uint256",
+            },
+        ],
+        name: "calcBuyAmount",
+        outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+        stateMutability: "view",
+        type: "function",
+    },
+    {
+        inputs: [
+            {
+                internalType: "uint256",
+                name: "_outcomeTokenId",
+                type: "uint256",
+            },
+            {
+                internalType: "uint256",
+                name: "_positionAmount",
+                type: "uint256",
+            },
+        ],
+        name: "calcSellAmount",
+        outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+        stateMutability: "view",
+        type: "function",
+    },
+    {
+        inputs: [
+            { internalType: "uint256", name: "_outcomeId", type: "uint256" },
+            { internalType: "uint256", name: "_tradeAmount", type: "uint256" },
+        ],
+        name: "calculatePriceImpact",
+        outputs: [
+            {
+                internalType: "uint256",
+                name: "priceImpactBps",
+                type: "uint256",
+            },
+        ],
+        stateMutability: "view",
+        type: "function",
+    },
+    {
+        inputs: [],
+        name: "claimInvalidMarket",
+        outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+        stateMutability: "nonpayable",
+        type: "function",
+    },
+    {
+        inputs: [],
+        name: "claimWinnings",
+        outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+        stateMutability: "nonpayable",
+        type: "function",
+    },
+    {
+        inputs: [],
+        name: "collectFees",
+        outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+        stateMutability: "nonpayable",
+        type: "function",
+    },
+    {
+        inputs: [
+            { internalType: "uint256", name: "_endTime", type: "uint256" },
+        ],
+        name: "extendMarket",
+        outputs: [],
+        stateMutability: "nonpayable",
+        type: "function",
+    },
     {
         inputs: [],
         name: "getMarketInfo",
@@ -321,6 +645,95 @@ export const MARKET_ABI = [
             },
         ],
         stateMutability: "view",
+        type: "function",
+    },
+    {
+        inputs: [],
+        name: "getOutcomeCount",
+        outputs: [
+            { internalType: "uint256", name: "_outcomeCount", type: "uint256" },
+        ],
+        stateMutability: "view",
+        type: "function",
+    },
+    {
+        inputs: [
+            { internalType: "uint256", name: "outcomeIndex", type: "uint256" },
+        ],
+        name: "getOutcomeDescription",
+        outputs: [
+            { internalType: "string", name: "_description", type: "string" },
+        ],
+        stateMutability: "view",
+        type: "function",
+    },
+    {
+        inputs: [
+            { internalType: "uint256", name: "_outcomeId", type: "uint256" },
+        ],
+        name: "getPrice",
+        outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+        stateMutability: "view",
+        type: "function",
+    },
+    {
+        inputs: [],
+        name: "getTotalLiquidity",
+        outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+        stateMutability: "view",
+        type: "function",
+    },
+    {
+        inputs: [],
+        name: "getTotalRealCollateral",
+        outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+        stateMutability: "view",
+        type: "function",
+    },
+    {
+        inputs: [],
+        name: "invalidateMarket",
+        outputs: [],
+        stateMutability: "nonpayable",
+        type: "function",
+    },
+    {
+        inputs: [
+            {
+                internalType: "uint256",
+                name: "_winningOutcomeTokenId",
+                type: "uint256",
+            },
+        ],
+        name: "resolveMarket",
+        outputs: [],
+        stateMutability: "nonpayable",
+        type: "function",
+    },
+    {
+        inputs: [
+            { internalType: "uint256", name: "_outcomeId", type: "uint256" },
+            { internalType: "uint256", name: "_tokenAmount", type: "uint256" },
+            {
+                internalType: "uint256",
+                name: "_maxPriceImpactBps",
+                type: "uint256",
+            },
+            {
+                internalType: "uint256",
+                name: "_minCollateralOut",
+                type: "uint256",
+            },
+        ],
+        name: "sell",
+        outputs: [
+            {
+                internalType: "uint256",
+                name: "collateralReturned",
+                type: "uint256",
+            },
+        ],
+        stateMutability: "nonpayable",
         type: "function",
     },
 ] as const;

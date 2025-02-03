@@ -1,20 +1,18 @@
 import type { Action } from "@elizaos/core";
-import {
-    HandlerCallback,
-    IAgentRuntime,
-    Memory,
-    State,
-    elizaLogger,
-} from "@elizaos/core";
+import { HandlerCallback, IAgentRuntime, Memory, State } from "@elizaos/core";
 import { createPublicClient, http, isAddress } from "viem";
 import type { Address } from "../types";
-import { FACTORY_ABI } from "../constants/abi";
+import { FACTORY_ABI, MARKET_ABI } from "../constants/abi";
 import { chain } from "../providers/wallet";
 import { validateSentientConfig } from "../environment";
 
 type GetMarketResponse = {
     marketId: `0x${string}`;
     marketAddress: Address;
+    question?: string;
+    endTime?: bigint;
+    collateralToken?: Address;
+    outcome?: number;
 };
 
 /**
@@ -30,8 +28,6 @@ export class GetMarketAction {
             transport: http(),
         });
 
-        elizaLogger.log("Fetching market:", { marketId, factoryAddress });
-
         const marketAddress = (await publicClient.readContract({
             address: factoryAddress,
             abi: FACTORY_ABI,
@@ -46,16 +42,71 @@ export class GetMarketAction {
             throw new Error("Market not found");
         }
 
-        return {
-            marketId,
-            marketAddress,
-        };
+        try {
+            const marketInfo = (await publicClient.readContract({
+                address: marketAddress,
+                abi: MARKET_ABI,
+                functionName: "getMarketInfo",
+            })) as [string, bigint, Address, number];
+
+            const [question, endTime, collateralToken, outcome] = marketInfo;
+
+            return {
+                marketId,
+                marketAddress,
+                question,
+                endTime,
+                collateralToken,
+                outcome,
+            };
+        } catch {
+            return {
+                marketId,
+                marketAddress,
+            };
+        }
     }
+}
+
+function formatDate(timestamp: bigint): string {
+    const date = new Date(Number(timestamp) * 1000);
+    const options: Intl.DateTimeFormatOptions = {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        timeZone: "UTC",
+        hour12: false,
+    };
+    return date.toLocaleString("en-US", options) + " UTC";
+}
+
+function formatMarketResponse(response: GetMarketResponse): string {
+    let text = `📈 Market Details:\n`;
+    text += `• ID: ${response.marketId}\n`;
+    text += `• Address: ${response.marketAddress}`;
+
+    if (response.question) {
+        text += `\n• Question: '${response.question}'`;
+    }
+    if (response.endTime) {
+        text += `\n• End Time: ${formatDate(response.endTime)}`;
+    }
+    if (response.collateralToken) {
+        text += `\n• Collateral: MODE (${response.collateralToken})`;
+    }
+    if (response.outcome !== undefined) {
+        text += `\n• Status: ${response.outcome === 0 ? "Trading" : response.outcome === 1 ? "Yes" : "No"}`;
+    }
+
+    return text;
 }
 
 export const getMarketsAction: Action = {
     name: "GET_MARKETS",
-    description: "Get market address by ID from the factory contract",
+    description: "Get market details by ID from the factory contract",
     handler: async (
         runtime: IAgentRuntime,
         message: Memory,
@@ -63,18 +114,13 @@ export const getMarketsAction: Action = {
         _options: any,
         callback?: HandlerCallback
     ): Promise<boolean> => {
-        elizaLogger.log("Starting GET_MARKETS handler...");
+        // Only handle direct market ID queries
+        const marketIdMatch = message.content?.text?.match(/0x[a-fA-F0-9]{64}/);
+        if (!marketIdMatch) {
+            return false;
+        }
 
         try {
-            // Extract market ID from message
-            const marketIdMatch =
-                message.content?.text?.match(/0x[a-fA-F0-9]{64}/);
-            if (!marketIdMatch) {
-                throw new Error(
-                    "Please provide a valid market ID hash (64 characters starting with 0x)"
-                );
-            }
-
             const marketId = marketIdMatch[0] as `0x${string}`;
             const factoryAddress = runtime.getSetting(
                 "PREDICTION_MARKET_FACTORY"
@@ -84,41 +130,53 @@ export const getMarketsAction: Action = {
                 throw new Error("Invalid factory address configuration");
             }
 
-            // Fetch market data
+            // Get market data from contract
             const action = new GetMarketAction();
             const response = await action.getMarket(factoryAddress, marketId);
 
-            elizaLogger.success(
-                "Market found! Address: " + response.marketAddress
-            );
+            // Only respond if we got valid data from the contract
+            if (
+                response.marketAddress ===
+                    "0x0000000000000000000000000000000000000000" ||
+                !response.question ||
+                !response.endTime
+            ) {
+                return false;
+            }
 
             if (callback) {
+                const formattedResponse = formatMarketResponse(response);
                 await callback({
-                    text: `📈 Market found!\nID: ${response.marketId}\nAddress: ${response.marketAddress}`,
+                    text: formattedResponse,
                     action: "GET_MARKETS",
-                    content: response,
+                    source: "contract",
+                    content: {
+                        marketId: response.marketId,
+                        marketAddress: response.marketAddress,
+                        question: response.question,
+                        endTime: response.endTime.toString(),
+                        collateralToken: response.collateralToken,
+                        outcome: response.outcome,
+                    },
                 });
             }
 
             return true;
         } catch (error) {
-            elizaLogger.error("Error getting market:", error);
             if (callback) {
                 await callback({
                     text: `Error getting market: ${error.message}`,
                     action: "GET_MARKETS",
-                    content: { error: error.message },
                 });
             }
-            return false;
+            return true;
         }
     },
     validate: async (runtime: IAgentRuntime) => {
         try {
             await validateSentientConfig(runtime);
             return true;
-        } catch (error) {
-            elizaLogger.error("GET_MARKETS validation error:", error);
+        } catch {
             return false;
         }
     },
@@ -127,8 +185,7 @@ export const getMarketsAction: Action = {
             {
                 user: "user",
                 content: {
-                    text: "Show me market 0x7b117239fb5993098323baced4ab297452d3fb903b4803b58f5c3b09018aafe7",
-                    action: "GET_MARKETS",
+                    text: "0x7b117239fb5993098323baced4ab297452d3fb903b4803b58f5c3b09018aafe7",
                 },
             },
         ],
@@ -139,11 +196,6 @@ export const getMarketsAction: Action = {
         "VIEW_MARKET",
         "DISPLAY_MARKET",
         "FETCH_MARKET",
-        "get market",
-        "show market",
-        "view market",
-        "display market",
-        "fetch market",
         "market info",
         "market details",
     ],

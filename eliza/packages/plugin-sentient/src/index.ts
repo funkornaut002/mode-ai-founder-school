@@ -7,10 +7,12 @@ import type { Plugin } from "@elizaos/core";
 import { createMarketAction } from "./actions/createMarket";
 import { getMarketsAction } from "./actions/getMarketsAction";
 import { evmWalletProvider } from "./providers/wallet";
+import { buyPositionAction } from "./actions/buyPosition";
 
 // Export all public APIs
 export * from "./actions/createMarket";
 export * from "./actions/getMarketsAction";
+export * from "./actions/buyPosition";
 export * from "./providers/wallet";
 export * from "./types";
 
@@ -24,7 +26,7 @@ export const sentientPlugin: Plugin = {
     providers: [evmWalletProvider],
     evaluators: [],
     services: [],
-    actions: [createMarketAction, getMarketsAction],
+    actions: [createMarketAction, getMarketsAction, buyPositionAction],
 };
 
 export default sentientPlugin;

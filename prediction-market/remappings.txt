@@ -1,7 +1,8 @@
 @openzeppelin/=node_modules/@openzeppelin/
-forge-std/=node_modules/forge-std/
+forge-std/=node_modules/forge-std/src/
 halmos-cheatcodes/=node_modules/halmos-cheatcodes/
 
 interfaces/=src/interfaces/
 contracts/=src/contracts/
-
+tokens/=src/contracts/tokens/
+smock/=test/smock/

@@ -70,3 +70,5 @@ This project is part of the Mode AI Founder School initiative, focusing on the i
 ## License
 
 [Add your license information here]
+
+MIT

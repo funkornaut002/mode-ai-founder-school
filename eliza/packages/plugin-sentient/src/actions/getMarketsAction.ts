@@ -1,112 +1,56 @@
 import type { Action } from "@elizaos/core";
 import { HandlerCallback, IAgentRuntime, Memory, State } from "@elizaos/core";
-import { createPublicClient, http, isAddress } from "viem";
+import { isAddress, createPublicClient, http } from "viem";
 import type { Address } from "../types";
-import { FACTORY_ABI, MARKET_ABI } from "../constants/abi";
+import { MARKET_ABI, FACTORY_ABI } from "../constants/abi";
 import { chain } from "../providers/wallet";
 import { validateSentientConfig } from "../environment";
 
-type GetMarketResponse = {
-    marketId: `0x${string}`;
-    marketAddress: Address;
-    question?: string;
-    endTime?: bigint;
-    collateralToken?: Address;
-    outcome?: number;
-};
-
-/**
- * Class to handle fetching market details from the factory contract
- */
-export class GetMarketAction {
-    async getMarket(
-        factoryAddress: Address,
-        marketId: `0x${string}`
-    ): Promise<GetMarketResponse> {
-        const publicClient = createPublicClient({
-            chain,
-            transport: http(),
-        });
-
-        const marketAddress = (await publicClient.readContract({
-            address: factoryAddress,
-            abi: FACTORY_ABI,
-            functionName: "getMarket",
-            args: [marketId],
-        })) as Address;
-
-        if (
-            !marketAddress ||
-            marketAddress === "0x0000000000000000000000000000000000000000"
-        ) {
-            throw new Error("Market not found");
-        }
-
-        try {
-            const marketInfo = (await publicClient.readContract({
-                address: marketAddress,
-                abi: MARKET_ABI,
-                functionName: "getMarketInfo",
-            })) as [string, bigint, Address, number];
-
-            const [question, endTime, collateralToken, outcome] = marketInfo;
-
-            return {
-                marketId,
-                marketAddress,
-                question,
-                endTime,
-                collateralToken,
-                outcome,
-            };
-        } catch {
-            return {
-                marketId,
-                marketAddress,
-            };
-        }
-    }
-}
+type MarketInfo = readonly [
+    question: string,
+    endTime: bigint,
+    collateralToken: Address,
+    initialLiquidity: bigint,
+    protocolFee: bigint,
+    outcomeDescriptions: string[],
+];
 
 function formatDate(timestamp: bigint): string {
     const date = new Date(Number(timestamp) * 1000);
-    const options: Intl.DateTimeFormatOptions = {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        timeZone: "UTC",
-        hour12: false,
-    };
-    return date.toLocaleString("en-US", options) + " UTC";
+    return (
+        date.toLocaleString("en-US", {
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            timeZone: "UTC",
+            hour12: true,
+        }) + " UTC"
+    );
 }
 
-function formatMarketResponse(response: GetMarketResponse): string {
-    let text = `📈 Market Details:\n`;
-    text += `• ID: ${response.marketId}\n`;
-    text += `• Address: ${response.marketAddress}`;
+function formatMarketResponse(marketData: any) {
+    const currentTime = Math.floor(Date.now() / 1000);
+    const endTime = Number(marketData.endTime);
+    const isEnded = endTime <= currentTime;
 
-    if (response.question) {
-        text += `\n• Question: '${response.question}'`;
-    }
-    if (response.endTime) {
-        text += `\n• End Time: ${formatDate(response.endTime)}`;
-    }
-    if (response.collateralToken) {
-        text += `\n• Collateral: MODE (${response.collateralToken})`;
-    }
-    if (response.outcome !== undefined) {
-        text += `\n• Status: ${response.outcome === 0 ? "Trading" : response.outcome === 1 ? "Yes" : "No"}`;
-    }
+    return `Here are the details for market ${marketData.marketAddress}:
 
-    return text;
+Question: '${marketData.question}'
+End Time: ${formatDate(BigInt(marketData.endTime))}
+Collateral Token: MODE (${marketData.collateralToken})
+Status: ${isEnded ? "Ended" : "Trading"}
+
+Current Prices:
+YES: ${(Number(marketData.yesPrice) / 1e18).toFixed(2)} MODE
+NO: ${(Number(marketData.noPrice) / 1e18).toFixed(2)} MODE`;
 }
 
 export const getMarketsAction: Action = {
     name: "GET_MARKETS",
-    description: "Get market details by ID from the factory contract",
+    description: "Get details of a specific prediction market",
     handler: async (
         runtime: IAgentRuntime,
         message: Memory,
@@ -114,50 +58,94 @@ export const getMarketsAction: Action = {
         _options: any,
         callback?: HandlerCallback
     ): Promise<boolean> => {
-        // Only handle direct market ID queries
-        const marketIdMatch = message.content?.text?.match(/0x[a-fA-F0-9]{64}/);
-        if (!marketIdMatch) {
+        // Only handle messages that contain a market ID or address
+        const marketIdMatch =
+            message.content?.text?.match(/0x[a-fA-F0-9]{64}/)?.[0];
+        const marketAddressMatch =
+            message.content?.text?.match(/0x[a-fA-F0-9]{40}/)?.[0];
+
+        if (!marketIdMatch && !marketAddressMatch) {
             return false;
         }
 
         try {
-            const marketId = marketIdMatch[0] as `0x${string}`;
-            const factoryAddress = runtime.getSetting(
-                "PREDICTION_MARKET_FACTORY"
-            ) as Address;
+            const publicClient = createPublicClient({
+                chain,
+                transport: http(),
+            });
 
-            if (!factoryAddress || !isAddress(factoryAddress)) {
-                throw new Error("Invalid factory address configuration");
-            }
+            let marketAddress: string;
 
-            // Get market data from contract
-            const action = new GetMarketAction();
-            const response = await action.getMarket(factoryAddress, marketId);
+            if (marketIdMatch) {
+                // If we have a market ID, get the address from the factory
+                const factoryAddress = runtime.getSetting(
+                    "PREDICTION_MARKET_FACTORY"
+                );
+                if (!factoryAddress || !isAddress(factoryAddress)) {
+                    throw new Error("Invalid factory address configuration");
+                }
 
-            // Only respond if we got valid data from the contract
-            if (
-                response.marketAddress ===
-                    "0x0000000000000000000000000000000000000000" ||
-                !response.question ||
-                !response.endTime
-            ) {
+                marketAddress = (await publicClient.readContract({
+                    address: factoryAddress as Address,
+                    abi: FACTORY_ABI,
+                    functionName: "markets",
+                    args: [marketIdMatch],
+                })) as Address;
+
+                if (
+                    !marketAddress ||
+                    marketAddress ===
+                        "0x0000000000000000000000000000000000000000"
+                ) {
+                    throw new Error("Market not found");
+                }
+            } else if (marketAddressMatch && isAddress(marketAddressMatch)) {
+                marketAddress = marketAddressMatch;
+            } else {
                 return false;
             }
 
+            // Get market info
+            const marketInfo = (await publicClient.readContract({
+                address: marketAddress as Address,
+                abi: MARKET_ABI,
+                functionName: "getMarketInfo",
+            })) as unknown as MarketInfo;
+
+            // Get current prices
+            const yesPrice = await publicClient.readContract({
+                address: marketAddress as Address,
+                abi: MARKET_ABI,
+                functionName: "getPrice",
+                args: [BigInt(1)], // YES position
+            });
+
+            const noPrice = await publicClient.readContract({
+                address: marketAddress as Address,
+                abi: MARKET_ABI,
+                functionName: "getPrice",
+                args: [BigInt(0)], // NO position
+            });
+
+            const marketData = {
+                marketId: marketIdMatch || null,
+                marketAddress,
+                question: marketInfo[0],
+                endTime: marketInfo[1].toString(),
+                collateralToken: marketInfo[2],
+                initialLiquidity: Number(marketInfo[3]) / 1e18,
+                protocolFee: Number(marketInfo[4]),
+                outcomeDescriptions: marketInfo[5],
+                yesPrice: yesPrice.toString(),
+                noPrice: noPrice.toString(),
+            };
+
             if (callback) {
-                const formattedResponse = formatMarketResponse(response);
                 await callback({
-                    text: formattedResponse,
+                    text: formatMarketResponse(marketData),
                     action: "GET_MARKETS",
                     source: "contract",
-                    content: {
-                        marketId: response.marketId,
-                        marketAddress: response.marketAddress,
-                        question: response.question,
-                        endTime: response.endTime.toString(),
-                        collateralToken: response.collateralToken,
-                        outcome: response.outcome,
-                    },
+                    content: marketData,
                 });
             }
 
@@ -167,9 +155,10 @@ export const getMarketsAction: Action = {
                 await callback({
                     text: `Error getting market: ${error.message}`,
                     action: "GET_MARKETS",
+                    source: "error",
                 });
             }
-            return true;
+            return false;
         }
     },
     validate: async (runtime: IAgentRuntime) => {
@@ -185,7 +174,8 @@ export const getMarketsAction: Action = {
             {
                 user: "user",
                 content: {
-                    text: "0x7b117239fb5993098323baced4ab297452d3fb903b4803b58f5c3b09018aafe7",
+                    text: "Show me market 0x2fd57cf9be6a2f570794344dabcf3b894d1379e2b4fbaa218bb95708b0a9579f",
+                    action: "GET_MARKETS",
                 },
             },
         ],
@@ -196,7 +186,5 @@ export const getMarketsAction: Action = {
         "VIEW_MARKET",
         "DISPLAY_MARKET",
         "FETCH_MARKET",
-        "market info",
-        "market details",
     ],
 };

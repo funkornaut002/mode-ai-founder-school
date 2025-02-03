@@ -1,5 +1,11 @@
 import type { Action } from "@elizaos/core";
-import { HandlerCallback, IAgentRuntime, Memory, State } from "@elizaos/core";
+import {
+    elizaLogger,
+    HandlerCallback,
+    IAgentRuntime,
+    Memory,
+    State,
+} from "@elizaos/core";
 import { isAddress, createPublicClient, http } from "viem";
 import type { Address } from "../types";
 import { MARKET_ABI, FACTORY_ABI } from "../constants/abi";
@@ -35,7 +41,8 @@ function formatMarketResponse(marketData: any) {
     const currentTime = Math.floor(Date.now() / 1000);
     const endTime = Number(marketData.endTime);
     const isEnded = endTime <= currentTime;
-
+    elizaLogger.log("Market Data:", marketData);
+    console.log(marketData);
     return `Here are the details for market ${marketData.marketAddress}:
 
 Question: '${marketData.question}'

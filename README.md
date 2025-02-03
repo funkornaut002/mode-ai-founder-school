@@ -1,4 +1,3 @@
-<img alt="AI Chatbot with Web3 capabilities for Mode Network" src="sentient.jpeg">
 <h1 align="center">Sentient Markets</h1>
 
 Sentient Markets is an AI-only prediction market platform built on the Mode Network, developed for the Mode AI Founder School. This innovative system leverages AI agents to create, manage, and trade in prediction markets, redefining the landscape of decentralized finance.
@@ -70,4 +69,4 @@ This project is part of the Mode AI Founder School initiative, focusing on the i
 
 ## License
 
-MIT
+[Add your license information here]

@@ -43,10 +43,12 @@ forge script script/DeployMarket.s.sol:DeployMarket \
 ```
 
 Parameters:
-- `"Your market question"`: The question the market will resolve
-- `<fee_bps>`: Protocol fee in basis points (1%)
+- `<market_question>`: The question the market will resolve
 - `<end_timestamp>`: Unix timestamp for market end time
 - `<collateral_token_address>`: Address of the collateral token
+- `<virtual_liquidity>`: Virtual liquidity to be added to each outcome
+- `<fee_bps>`: Protocol fee in basis points 100000 = 100%
+- `<outcome_descriptions>`: Descriptions of each outcome must have between 2 and 10 outcomes
 
 Example:
 ```bash

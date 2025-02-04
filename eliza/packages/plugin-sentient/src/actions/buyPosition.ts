@@ -87,7 +87,6 @@ function getErrorMessage(error: any): string {
     // Check if it's a contract revert error
     if (error.cause?.name === "ContractFunctionRevertedError") {
         const signature = error.cause.signature;
-        // Map known error signatures to human-readable messages
         switch (signature) {
             case "Market_TradingEnded":
                 return "Trading has ended for this market";
@@ -98,19 +97,12 @@ function getErrorMessage(error: any): string {
             case "Market_InsufficientOutput":
                 return "Insufficient tokens would be received. Try adjusting minTokensOut";
             case "Market_InsufficientAllowance":
-                return "Insufficient allowance. Please approve more MODE tokens for trading";
+                return "Insufficient MODE token allowance. Please approve more tokens for trading.";
             case "0xfb8f41b2": // Market_InsufficientBalance
-                return "Insufficient MODE token balance for this trade. Please ensure you have enough MODE tokens and they are approved for trading.";
+                return "Insufficient MODE token balance. Please ensure you have enough MODE tokens.";
             default:
                 return `Market contract error: ${signature || "Unknown error"}`;
         }
-    }
-    // Handle other types of errors
-    if (
-        error.message &&
-        error.message.includes("Insufficient MODE token balance")
-    ) {
-        return error.message; // Return the detailed balance message
     }
     return error.message || "Unknown error occurred";
 }
@@ -208,34 +200,8 @@ export const buyPositionAction: Action = {
                 args: [walletClient.account.address],
             });
 
-            // Log trade checks
-            elizaLogger.log("Trade checks:", {
-                userAddress: walletClient.account.address,
-                balanceWei: balance.toString(),
-                balanceMODE: Number(balance) / 1e18,
-                requiredWei: amountInWei.toString(),
-                requiredMODE: content.amount,
-                collateralToken,
-                outcomeId: content.outcomeId,
-                currentPrice: Number(currentPrice) / 1e18,
-            });
-
-            if (balance < amountInWei) {
-                const balanceInMode = Number(balance) / 1e18;
-                throw new Error(
-                    `Insufficient MODE token balance for ${content.outcomeId === 1 ? "YES" : "NO"} position.\n` +
-                        `Your balance: ${balanceInMode.toFixed(4)} MODE\n` +
-                        `Required: ${content.amount} MODE\n` +
-                        `Current price: ${Number(currentPrice) / 1e18} MODE\n` +
-                        `Address: ${walletClient.account.address}\n` +
-                        `Collateral Token: ${collateralToken}`
-                );
-            }
-
-            elizaLogger.log("Balance check passed, checking allowance...");
-
             // Check allowance
-            const currentAllowance = await publicClient.readContract({
+            const allowance = await publicClient.readContract({
                 address: collateralToken,
                 abi: [
                     {
@@ -270,16 +236,23 @@ export const buyPositionAction: Action = {
                 ],
             });
 
-            elizaLogger.log("Allowance check:", {
-                allowanceWei: currentAllowance.toString(),
-                allowanceMODE: Number(currentAllowance) / 1e18,
-                requiredWei: amountInWei.toString(),
-                requiredMODE: content.amount,
+            // Log balance and allowance info
+            elizaLogger.log("Token checks:", {
+                balance: Number(balance) / 1e18,
+                required: content.amount,
+                allowance: Number(allowance) / 1e18,
+                address: walletClient.account.address,
             });
 
-            // Only approve if current allowance is insufficient
-            if (currentAllowance < amountInWei) {
+            if (balance < amountInWei) {
+                throw new Error(
+                    `Insufficient MODE token balance. You have ${(Number(balance) / 1e18).toFixed(4)} MODE but need ${content.amount} MODE.`
+                );
+            }
+
+            if (allowance < amountInWei) {
                 // Approve MODE tokens
+                elizaLogger.log("Approving MODE tokens...");
                 const approveHash = await walletClient.writeContract({
                     address: collateralToken,
                     abi: ERC20_ABI,
@@ -289,9 +262,11 @@ export const buyPositionAction: Action = {
                     account: walletClient.account,
                 });
 
-                elizaLogger.log("MODE tokens approved. Hash:", approveHash);
-            } else {
-                elizaLogger.log("Sufficient allowance already exists");
+                elizaLogger.log("Waiting for approval transaction...");
+                await publicClient.waitForTransactionReceipt({
+                    hash: approveHash,
+                });
+                elizaLogger.log("MODE tokens approved successfully");
             }
 
             elizaLogger.log("All checks passed, proceeding with trade...");

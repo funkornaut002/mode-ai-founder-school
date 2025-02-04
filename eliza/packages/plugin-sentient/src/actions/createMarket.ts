@@ -19,7 +19,18 @@ import { chain } from "../providers/wallet";
 
 const CreateMarketSchema = z.object({
     question: z.string(),
-    endDate: z.number(),
+    endDate: z.number().transform((val) => {
+        // Convert timestamp to Date object
+        const date = new Date(val);
+
+        // If it's already a valid timestamp, just ensure it ends at 23:59:59
+        if (!isNaN(date.getTime())) {
+            date.setUTCHours(23, 59, 59, 999);
+            return date.getTime();
+        }
+
+        throw new Error("Invalid date format");
+    }),
     initialLiquidity: z.number().default(10),
     protocolFee: z.number().default(1),
     outcomeDescriptions: z.array(z.string()).default(["Yes", "No"]),
@@ -51,6 +62,13 @@ Example response:
 Given the recent messages, extract the following information about the requested market creation:
 - Question for the market
 - End date (timestamp in milliseconds)
+  Examples of valid end dates:
+  - "end of Q1 2024" -> 1711929599000 (March 31, 2024, 23:59:59 UTC)
+  - "end of Q2 2024" -> 1719791999000 (June 30, 2024, 23:59:59 UTC)
+  - "end of Q3 2024" -> 1727797199000 (September 30, 2024, 23:59:59 UTC)
+  - "end of Q4 2024" -> 1735689599000 (December 31, 2024, 23:59:59 UTC)
+  - "December 31, 2024" -> 1735689599000 (December 31, 2024, 23:59:59 UTC)
+  Note: All end dates will be set to 23:59:59 UTC of the specified date
 - Initial liquidity amount in MODE tokens (default to 10)
 - Protocol fee percentage (default to 1)
 - Outcome descriptions (array of strings, default to ["Yes", "No"])
@@ -171,8 +189,15 @@ export const createMarketAction: Action = {
 
             if (callback) {
                 callback({
-                    text: `Market created successfully!\nQuestion: ${content.question}\nEnd Time: ${new Date(content.endDate).toLocaleString()}\nInitial Liquidity: ${content.initialLiquidity} MODE\nTransaction: ${hash}`,
-                    content: { hash },
+                    text: `Market created successfully!\nQuestion: ${content.question}\nEnd Time: ${endTimeSeconds} (${new Date(content.endDate).toUTCString()})\nInitial Liquidity: ${content.initialLiquidity} MODE\nTransaction: ${hash}`,
+                    content: {
+                        hash,
+                        question: content.question,
+                        endTime: endTimeSeconds,
+                        endTimeUTC: new Date(content.endDate).toUTCString(),
+                        initialLiquidity: content.initialLiquidity,
+                        outcomeDescriptions: content.outcomeDescriptions,
+                    },
                 });
             }
 

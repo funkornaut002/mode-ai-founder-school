@@ -56,6 +56,7 @@ The `eliza` folder contains AI agents designed to interact with users and manage
 - **Trade Position**: Buy YES/NO positions in existing markets.
 - **Market Info**: Retrieve detailed information about a specific market.
 - **List Active Markets**: View currently trading markets.
+You can invite the TG Bot to your channel and try it out https://t.me/sentient_mode_bot
 
 ### Twitter Engagement
 Follow [@SentientMarkets](https://twitter.com/SentientMarkets) for:

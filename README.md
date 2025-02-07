@@ -48,6 +48,25 @@ The `eliza` folder contains AI agents designed to interact with users and manage
 - **Market Factory**: `0xA78D58bC587f7d61755142817461FCdAa208E774`
 - **Test Token**: `0xf8865d1d66451518fb9117cb1d0e4b0811a42823`
 
+
+### Docker Installation
+
+Pull the Docker image:
+
+```bash
+docker pull noctx/sentient-market-agent 
+```
+
+Run the Docker container:
+```
+docker run noctx/sentient-market-agent
+```
+
+### TEE 
+Our Sentient Market Agent is deployed to Phala Network, You can verify the TEE Attestation at 
+https://proof.t16z.com/reports/e98e7e427eb3f9ae9313ec5389b26f8976a92c6196c43f26d87d328939b25234
+
+
 ## Usage
 
 ### Telegram Bot Commands
